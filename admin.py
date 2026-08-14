@@ -537,18 +537,19 @@ async def ai_chat_response(message: types.Message):
 
 # ========================================
 # ========================================
-# ===== توابع ارتباط با جیمینای =====
+# ===== توابع ارتباط با جیمینای (نسخه نهایی) =====
 # ========================================
 # ========================================
 
 async def get_gemini_summary(file_id):
-    """دریافت خلاصه کتاب از جیمینای"""
+    """دریافت خلاصه کتاب از جیمینای با مدل صحیح"""
     try:
         text = await extract_text_from_file(file_id)
         if not text:
             return None
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        # ===== استفاده از مدل صحیح =====
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
         
         prompt = f"خلاصه زیر رو به فارسی بنویس (حداکثر ۱۰ خط):\n\n{text[:5000]}"
         
@@ -559,7 +560,10 @@ async def get_gemini_summary(file_id):
                 if response.status == 200:
                     data = await response.json()
                     return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                return None
+                else:
+                    error_text = await response.text()
+                    print(f"❌ خطا: {response.status} - {error_text}")
+                    return None
     except Exception as e:
         print(f"خطا در خلاصه‌سازی: {e}")
         return None
@@ -571,7 +575,8 @@ async def get_gemini_analysis(file_id):
         if not text:
             return None
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        # ===== استفاده از مدل صحیح =====
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
         
         prompt = f"""کتاب زیر رو تحلیل کن:
 
@@ -592,7 +597,10 @@ async def get_gemini_analysis(file_id):
                 if response.status == 200:
                     data = await response.json()
                     return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                return None
+                else:
+                    error_text = await response.text()
+                    print(f"❌ خطا: {response.status} - {error_text}")
+                    return None
     except Exception as e:
         print(f"خطا در تحلیل: {e}")
         return None
@@ -600,7 +608,8 @@ async def get_gemini_analysis(file_id):
 async def get_gemini_response(prompt):
     """دریافت پاسخ از جیمینای"""
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        # ===== استفاده از مدل صحیح =====
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
         
         full_prompt = f"به فارسی پاسخ بده. پاسخ‌هات کوتاه و مفید باشه:\n\n{prompt}"
         
@@ -611,7 +620,10 @@ async def get_gemini_response(prompt):
                 if response.status == 200:
                     data = await response.json()
                     return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                return None
+                else:
+                    error_text = await response.text()
+                    print(f"❌ خطا: {response.status} - {error_text}")
+                    return None
     except Exception as e:
         print(f"خطا در چت: {e}")
         return None
@@ -619,7 +631,7 @@ async def get_gemini_response(prompt):
 async def extract_text_from_file(file_id):
     """استخراج متن از فایل PDF (برای جیمینای)"""
     try:
-        # توجه: اینجا باید فایل رو از تلگرام دانلود کنی و متن رو استخراج کنی
+        # اینجا باید فایل رو از تلگرام دانلود کنی و متن رو استخراج کنی
         # فعلاً یه متن نمونه برمیگردونه
         return "این متن نمونه از کتاب است. برای دریافت متن واقعی، باید فایل PDF دانلود و پردازش شود."
     except Exception as e:
