@@ -1,11 +1,18 @@
 import asyncio
+import logging
 from aiogram import Bot, Dispatcher
 from config import BOT_TOKEN
-from handlers import router
+from handlers import router as user_router
+from admin import router as admin_router  # ← این خط رو اضافه کن!
+
+logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-dp.include_router(router)
+
+# ===== ثبت روت‌ها =====
+dp.include_router(user_router)   # ← روت کاربر (استارت، منو، ...)
+dp.include_router(admin_router)  # ← روت ادمین (پنل، مدیریت، ...)
 
 async def main():
     print("🤖 ربات روشن شد!")
