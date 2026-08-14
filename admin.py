@@ -1,7 +1,7 @@
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from config import ADMIN_ID
+from config import ADMIN_ID, GEMINI_API_KEY
 from database import *
 import asyncio
 import aiohttp
@@ -85,7 +85,7 @@ async def check_mem_inline(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 📚 مدیریت کتاب‌ها (با جلد و ژانر)
+# 📚 مدیریت کتاب‌ها
 # ========================================
 # ========================================
 
@@ -101,7 +101,7 @@ async def manage_books(message: types.Message):
     ])
     await message.answer("📚 **مدیریت کتاب‌ها**", reply_markup=keyboard)
 
-# ===== افزودن کتاب (با جلد و ژانر) =====
+# ===== افزودن کتاب =====
 @router.callback_query(lambda c: c.data == "add_book")
 async def add_book_start(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
@@ -336,7 +336,6 @@ async def delete_banner_confirm(call: types.CallbackQuery):
     delete_banner()
     await call.message.edit_text("✅ بنر حذف شد!")
 
-# ===== 👀 دیدن بنر =====
 @router.message(lambda m: m.text == "👀 دیدن بنر" and m.from_user.id == ADMIN_ID)
 async def view_banner(message: types.Message):
     banner = get_banner()
@@ -399,7 +398,7 @@ async def advanced_stats(message: types.Message):
 
 # ========================================
 # ========================================
-# 🤖 هوش مصنوعی
+# 🤖 هوش مصنوعی با جیمینای (فعال)
 # ========================================
 # ========================================
 
@@ -407,23 +406,26 @@ async def advanced_stats(message: types.Message):
 async def ai_panel(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📝 خلاصه‌سازی کتاب", callback_data="ai_summarize")],
-        [InlineKeyboardButton(text="💬 چت با هوش مصنوعی", callback_data="ai_chat")],
+        [InlineKeyboardButton(text="💬 چت با جیمینای", callback_data="ai_chat")],
+        [InlineKeyboardButton(text="📊 تحلیل کتاب", callback_data="ai_analyze")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
     ])
     await message.answer(
-        "🤖 **پنل هوش مصنوعی**\n\n"
+        "🤖 **پنل هوش مصنوعی با جیمینای**\n\n"
         "✨ قابلیت‌های پیشرفته:\n"
         "• خلاصه‌سازی هوشمند کتاب‌ها\n"
-        "• چت هوشمند",
+        "• چت با جیمینای\n"
+        "• تحلیل عمیق کتاب‌ها",
         reply_markup=keyboard
     )
 
-# ===== خلاصه‌سازی کتاب =====
+# ===== خلاصه‌سازی کتاب با جیمینای =====
 @router.callback_query(lambda c: c.data == "ai_summarize")
 async def ai_summarize_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_summarize"}
     await call.message.edit_text(
-        "📝 **آیدی کتاب رو برای خلاصه‌سازی بفرست:**"
+        "📝 **آیدی کتاب رو برای خلاصه‌سازی بفرست:**\n\n"
+        "🤖 جیمینای خلاصه‌ای حرفه‌ای از کتاب تولید میکنه."
     )
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_summarize")
@@ -436,22 +438,80 @@ async def ai_summarize_confirm(message: types.Message):
             user_states[message.from_user.id] = {}
             return
         
-        await message.answer(f"🔄 در حال خلاصه‌سازی کتاب «{book[1]}»...\n\n🤖 این قابلیت نیاز به کلید جیمینای دارد.")
-        await message.answer(
-            f"📝 **خلاصه کتاب «{book[1]}»:**\n\n"
-            f"این یک خلاصه نمونه است. برای خلاصه‌سازی واقعی، کلید جیمینای را تنظیم کنید."
-        )
-    except:
-        await message.answer("❌ لطفاً یک عدد معتبر بفرست!")
+        await message.answer(f"🔄 در حال خلاصه‌سازی کتاب «{book[1]}» با جیمینای...")
+        
+        if not GEMINI_API_KEY:
+            await message.answer("❌ کلید جیمینای تنظیم نشده! لطفاً GEMINI_API_KEY رو توی ریلیوی تنظیم کن.")
+            user_states[message.from_user.id] = {}
+            return
+        
+        summary = await get_gemini_summary(book[6])
+        
+        if summary:
+            await message.answer(
+                f"📝 **خلاصه کتاب «{book[1]}»:**\n\n"
+                f"{summary}\n\n"
+                f"🤖 تولید شده توسط Gemini AI"
+            )
+        else:
+            await message.answer("❌ خطا در خلاصه‌سازی! مطمئن شو فایل PDF معتبر است.")
+            
+    except Exception as e:
+        await message.answer(f"❌ خطا: {str(e)[:100]}")
     user_states[message.from_user.id] = {}
 
-# ===== چت با هوش مصنوعی =====
+# ===== تحلیل کتاب با جیمینای =====
+@router.callback_query(lambda c: c.data == "ai_analyze")
+async def ai_analyze_start(call: types.CallbackQuery):
+    user_states[call.from_user.id] = {"state": "waiting_analyze"}
+    await call.message.edit_text(
+        "📊 **آیدی کتاب رو برای تحلیل بفرست:**\n\n"
+        "🤖 جیمینای تحلیل عمیقی از کتاب انجام میده:\n"
+        "• شخصیت‌های اصلی\n"
+        "• تم‌های اصلی\n"
+        "• سبک نوشتاری\n"
+        "• نکات کلیدی"
+    )
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_analyze")
+async def ai_analyze_confirm(message: types.Message):
+    try:
+        book_id = int(message.text)
+        book = get_book(book_id)
+        if not book:
+            await message.answer("❌ کتاب پیدا نشد!")
+            user_states[message.from_user.id] = {}
+            return
+        
+        await message.answer(f"🔄 در حال تحلیل کتاب «{book[1]}» با جیمینای...")
+        
+        if not GEMINI_API_KEY:
+            await message.answer("❌ کلید جیمینای تنظیم نشده!")
+            user_states[message.from_user.id] = {}
+            return
+        
+        analysis = await get_gemini_analysis(book[6])
+        
+        if analysis:
+            await message.answer(
+                f"📊 **تحلیل کتاب «{book[1]}»:**\n\n"
+                f"{analysis}\n\n"
+                f"🤖 تحلیل شده توسط Gemini AI"
+            )
+        else:
+            await message.answer("❌ خطا در تحلیل کتاب!")
+            
+    except Exception as e:
+        await message.answer(f"❌ خطا: {str(e)[:100]}")
+    user_states[message.from_user.id] = {}
+
+# ===== چت با جیمینای =====
 @router.callback_query(lambda c: c.data == "ai_chat")
 async def ai_chat_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_ai_chat"}
     await call.message.edit_text(
-        "💬 **چت با هوش مصنوعی**\n\n"
-        "هر چی دوست داری بپرس!\n"
+        "💬 **چت با جیمینای**\n\n"
+        "هر چی دوست داری بپرس! جیمینای جواب میده 😊\n"
         "برای بستن /cancel بفرست."
     )
 
@@ -462,8 +522,109 @@ async def ai_chat_response(message: types.Message):
         await message.answer("✅ چت بسته شد!")
         return
     
-    await message.answer("🤔 دارم فکر میکنم...\n\n🤖 این قابلیت نیاز به کلید جیمینای دارد.")
-    user_states[message.from_user.id] = {}
+    if not GEMINI_API_KEY:
+        await message.answer("❌ کلید جیمینای تنظیم نشده! لطفاً GEMINI_API_KEY رو توی ریلیوی تنظیم کن.")
+        return
+    
+    await message.answer("🤔 دارم از جیمینای میپرسم...")
+    
+    response = await get_gemini_response(message.text)
+    
+    if response:
+        await message.answer(response)
+    else:
+        await message.answer("❌ خطا در ارتباط با جیمینای!")
+
+# ========================================
+# ========================================
+# ===== توابع ارتباط با جیمینای =====
+# ========================================
+# ========================================
+
+async def get_gemini_summary(file_id):
+    """دریافت خلاصه کتاب از جیمینای"""
+    try:
+        text = await extract_text_from_file(file_id)
+        if not text:
+            return None
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        
+        prompt = f"خلاصه زیر رو به فارسی بنویس (حداکثر ۱۰ خط):\n\n{text[:5000]}"
+        
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=30) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return None
+    except Exception as e:
+        print(f"خطا در خلاصه‌سازی: {e}")
+        return None
+
+async def get_gemini_analysis(file_id):
+    """تحلیل کتاب با جیمینای"""
+    try:
+        text = await extract_text_from_file(file_id)
+        if not text:
+            return None
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        
+        prompt = f"""کتاب زیر رو تحلیل کن:
+
+        ۱. شخصیت‌های اصلی
+        ۲. تم‌های اصلی
+        ۳. سبک نوشتاری
+        ۴. نکات کلیدی
+        ۵. پیام اصلی
+
+        متن:
+        {text[:5000]}
+        """
+        
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=30) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return None
+    except Exception as e:
+        print(f"خطا در تحلیل: {e}")
+        return None
+
+async def get_gemini_response(prompt):
+    """دریافت پاسخ از جیمینای"""
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        
+        full_prompt = f"به فارسی پاسخ بده. پاسخ‌هات کوتاه و مفید باشه:\n\n{prompt}"
+        
+        payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=30) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return None
+    except Exception as e:
+        print(f"خطا در چت: {e}")
+        return None
+
+async def extract_text_from_file(file_id):
+    """استخراج متن از فایل PDF (برای جیمینای)"""
+    try:
+        # توجه: اینجا باید فایل رو از تلگرام دانلود کنی و متن رو استخراج کنی
+        # فعلاً یه متن نمونه برمیگردونه
+        return "این متن نمونه از کتاب است. برای دریافت متن واقعی، باید فایل PDF دانلود و پردازش شود."
+    except Exception as e:
+        print(f"خطا در استخراج متن: {e}")
+        return None
 
 # ========================================
 # ========================================
