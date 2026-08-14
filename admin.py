@@ -33,7 +33,6 @@ def get_admin_keyboard():
         resize_keyboard=True
     )
 
-
 # ========================================
 # ===== پنل اصلی =====
 # ========================================
@@ -48,7 +47,6 @@ async def panel(message: types.Message):
         reply_markup=get_admin_keyboard()
     )
 
-
 # ========================================
 # ===== بستن پنل =====
 # ========================================
@@ -59,11 +57,9 @@ async def close_panel(message: types.Message):
         reply_markup=types.ReplyKeyboardRemove()
     )
 
-
 # ========================================
 # 👀 پنل عضویت اجباری
 # ========================================
-
 @router.message(lambda m: m.text == "👀 پنل عضویت" and m.from_user.id == ADMIN_ID)
 async def view_join_panel(message: types.Message):
     channels = get_channels()
@@ -97,19 +93,13 @@ async def view_join_panel(message: types.Message):
         reply_markup=keyboard
     )
 
-
 @router.callback_query(lambda c: c.data == "check_mem_inline")
 async def check_mem_inline(call: types.CallbackQuery):
-    await call.answer(
-        "✅ عضویت تایید شد!",
-        show_alert=True
-    )
-
+    await call.answer("✅ عضویت تایید شد!", show_alert=True)
 
 # ========================================
 # 📚 مدیریت کتاب‌ها
 # ========================================
-
 @router.message(lambda m: m.text == "📚 مدیریت کتاب‌ها" and m.from_user.id == ADMIN_ID)
 async def manage_books(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -126,27 +116,19 @@ async def manage_books(message: types.Message):
         reply_markup=keyboard
     )
 
-
 # ===== افزودن کتاب =====
 @router.callback_query(lambda c: c.data == "add_book")
 async def add_book_start(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
         return
 
-    user_states[call.from_user.id] = {
-        "state": "waiting_title"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_title"}
 
     await call.message.edit_text(
         "📝 **عنوان کتاب رو بفرست:**"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_title"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_title")
 async def get_title(message: types.Message):
     user_states[message.from_user.id]["title"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_author"
@@ -156,12 +138,7 @@ async def get_title(message: types.Message):
         "(برای رد شدن /skip بفرست)"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_author"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_author")
 async def get_author(message: types.Message):
     if message.text == "/skip":
         user_states[message.from_user.id]["author"] = ""
@@ -175,12 +152,7 @@ async def get_author(message: types.Message):
         "(برای رد شدن /skip بفرست)"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_genre"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_genre")
 async def get_genre(message: types.Message):
     if message.text == "/skip":
         user_states[message.from_user.id]["genre"] = ""
@@ -194,12 +166,7 @@ async def get_genre(message: types.Message):
         "(برای رد شدن /skip بفرست)"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_description"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_description")
 async def get_description(message: types.Message):
     if message.text == "/skip":
         user_states[message.from_user.id]["description"] = ""
@@ -213,12 +180,7 @@ async def get_description(message: types.Message):
         "(برای رد شدن /skip بفرست)"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_cover"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_cover")
 async def get_cover(message: types.Message):
 
     if message.text == "/skip":
@@ -228,7 +190,6 @@ async def get_cover(message: types.Message):
         await message.answer(
             "📄 **حالا فایل کتاب رو بفرست (PDF/ZIP):**"
         )
-
         return
 
     if message.photo:
@@ -238,19 +199,12 @@ async def get_cover(message: types.Message):
         await message.answer(
             "📄 **حالا فایل کتاب رو بفرست (PDF/ZIP):**"
         )
-
     else:
         await message.answer(
             "❌ لطفاً یک عکس بفرست یا /skip بزن!"
         )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and m.document
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_file"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and m.document and user_states.get(m.from_user.id, {}).get("state") == "waiting_file")
 async def get_file(message: types.Message):
     data = user_states[message.from_user.id]
 
@@ -270,7 +224,6 @@ async def get_file(message: types.Message):
     await message.answer(
         f"✅ **کتاب «{data.get('title')}» با موفقیت اضافه شد!**"
     )
-
 
 # ===== لیست کتاب‌ها =====
 @router.callback_query(lambda c: c.data == "list_books")
@@ -293,24 +246,16 @@ async def list_books(call: types.CallbackQuery):
 
     await call.message.edit_text(text)
 
-
 # ===== حذف کتاب =====
 @router.callback_query(lambda c: c.data == "delete_book")
 async def delete_book_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_delete"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_delete"}
 
     await call.message.edit_text(
         "📝 **آیدی کتاب رو برای حذف بفرست:**"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_delete"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_delete")
 async def delete_book_confirm(message: types.Message):
     try:
         book_id = int(message.text)
@@ -333,24 +278,16 @@ async def delete_book_confirm(message: types.Message):
 
     user_states[message.from_user.id] = {}
 
-
 # ===== جستجوی کتاب =====
 @router.callback_query(lambda c: c.data == "search_book")
 async def search_book_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_search"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_search"}
 
     await call.message.edit_text(
         "🔍 **عبارت جستجو رو بفرست:**"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_search"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_search")
 async def search_book_confirm(message: types.Message):
     query = message.text
     results = search_books(query)
@@ -370,27 +307,18 @@ async def search_book_confirm(message: types.Message):
         text += f"\n... و {len(results) - 5} نتیجه دیگه"
 
     await message.answer(text)
-
     user_states[message.from_user.id] = {}
-
 
 # ===== کتاب‌های یک ژانر =====
 @router.callback_query(lambda c: c.data == "genre_books")
 async def genre_books_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_genre_list"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_genre_list"}
 
     await call.message.edit_text(
         "📂 **نام ژانر رو بفرست:**"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_genre_list"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_genre_list")
 async def genre_books_confirm(message: types.Message):
     genre = message.text
     books = get_books_by_genre(genre)
@@ -410,9 +338,7 @@ async def genre_books_confirm(message: types.Message):
         text += f"\n... و {len(books) - 10} کتاب دیگه"
 
     await message.answer(text)
-
     user_states[message.from_user.id] = {}
-
 
 # ========================================
 # 📢 مدیریت کانال‌ها
@@ -423,12 +349,7 @@ async def manage_channels(message: types.Message):
     channels = get_channels()
 
     text = "📢 **لیست کانال‌ها:**\n\n"
-
-    text += (
-        "\n".join([f"• @{ch}" for ch in channels])
-        if channels
-        else "❌ هیچ کانالی وجود نداره!"
-    )
+    text += "\n".join([f"• @{ch}" for ch in channels]) if channels else "❌ هیچ کانالی وجود نداره!"
 
     await message.answer(text)
 
@@ -443,23 +364,15 @@ async def manage_channels(message: types.Message):
         reply_markup=keyboard
     )
 
-
 @router.callback_query(lambda c: c.data == "add_channel")
 async def add_channel_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_channel"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_channel"}
 
     await call.message.edit_text(
         "📢 **نام کانال رو بفرست (بدون @):**"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_channel"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_channel")
 async def add_channel_confirm(message: types.Message):
     ch = message.text.strip().replace("@", "")
 
@@ -471,23 +384,15 @@ async def add_channel_confirm(message: types.Message):
         f"✅ کانال @{ch} اضافه شد!"
     )
 
-
 @router.callback_query(lambda c: c.data == "remove_channel")
 async def remove_channel_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_remove_channel"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_remove_channel"}
 
     await call.message.edit_text(
         "📢 **نام کانال رو برای حذف بفرست:**"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_remove_channel"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_remove_channel")
 async def remove_channel_confirm(message: types.Message):
     ch = message.text.strip().replace("@", "")
 
@@ -499,9 +404,8 @@ async def remove_channel_confirm(message: types.Message):
         f"✅ کانال @{ch} حذف شد!"
     )
 
-
 # ========================================
-# 🎨 مدیریت بنر
+# 🎨 مدیریت بنر + 👀 دیدن بنر
 # ========================================
 
 @router.message(lambda m: m.text == "🎨 مدیریت بنر" and m.from_user.id == ADMIN_ID)
@@ -517,12 +421,9 @@ async def manage_banner(message: types.Message):
         reply_markup=keyboard
     )
 
-
 @router.callback_query(lambda c: c.data == "set_banner")
 async def set_banner_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_banner"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_banner"}
 
     await call.message.edit_text(
         "📝 **بنر رو بفرست**\n\n"
@@ -531,24 +432,11 @@ async def set_banner_start(call: types.CallbackQuery):
         "• ویدیو"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_banner"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_banner")
 async def set_banner_confirm(message: types.Message):
-
     if message.text:
-        set_banner(
-            "text",
-            None,
-            message.text
-        )
-
-        await message.answer(
-            "✅ بنر متنی ذخیره شد!"
-        )
+        set_banner("text", None, message.text)
+        await message.answer("✅ بنر متنی ذخیره شد!")
 
     elif message.photo:
         set_banner(
@@ -556,10 +444,7 @@ async def set_banner_confirm(message: types.Message):
             message.photo[-1].file_id,
             message.caption or ""
         )
-
-        await message.answer(
-            "✅ بنر عکس ذخیره شد!"
-        )
+        await message.answer("✅ بنر عکس ذخیره شد!")
 
     elif message.video:
         set_banner(
@@ -567,28 +452,18 @@ async def set_banner_confirm(message: types.Message):
             message.video.file_id,
             message.caption or ""
         )
-
-        await message.answer(
-            "✅ بنر ویدیو ذخیره شد!"
-        )
+        await message.answer("✅ بنر ویدیو ذخیره شد!")
 
     else:
-        await message.answer(
-            "❌ نوع فایل پشتیبانی نمیشه!"
-        )
+        await message.answer("❌ نوع فایل پشتیبانی نمیشه!")
         return
 
     user_states[message.from_user.id] = {}
 
-
 @router.callback_query(lambda c: c.data == "delete_banner")
 async def delete_banner_confirm(call: types.CallbackQuery):
     delete_banner()
-
-    await call.message.edit_text(
-        "✅ بنر حذف شد!"
-    )
-
+    await call.message.edit_text("✅ بنر حذف شد!")
 
 @router.message(lambda m: m.text == "👀 دیدن بنر" and m.from_user.id == ADMIN_ID)
 async def view_banner(message: types.Message):
@@ -611,7 +486,6 @@ async def view_banner(message: types.Message):
             f"📝 **بنر فعلی:**\n\n{banner['text']}"
         )
 
-
 # ========================================
 # 👥 مدیریت کاربران
 # ========================================
@@ -629,12 +503,10 @@ async def manage_users(message: types.Message):
 
         for user in users[:10]:
             text += f"• {user[1] or 'نامشخص'} - {user[0]}\n"
-
     else:
         text += "❌ هیچ کاربری ثبت نشده!"
 
     await message.answer(text)
-
 
 # ========================================
 # 📊 آمار پیشرفته
@@ -674,7 +546,6 @@ async def advanced_stats(message: types.Message):
         f"{popular_text}"
     )
 
-
 # ========================================
 # 🤖 هوش مصنوعی با جیمینای
 # ========================================
@@ -682,30 +553,10 @@ async def advanced_stats(message: types.Message):
 @router.message(lambda m: m.text == "🤖 هوش مصنوعی" and m.from_user.id == ADMIN_ID)
 async def ai_panel(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="📝 خلاصه‌سازی کتاب",
-                callback_data="ai_summarize"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="💬 چت با جیمینای",
-                callback_data="ai_chat"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📊 تحلیل کتاب",
-                callback_data="ai_analyze"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="🔙 بازگشت",
-                callback_data="back_to_panel"
-            )
-        ]
+        [InlineKeyboardButton(text="📝 خلاصه‌سازی کتاب", callback_data="ai_summarize")],
+        [InlineKeyboardButton(text="💬 چت با جیمینای", callback_data="ai_chat")],
+        [InlineKeyboardButton(text="📊 تحلیل کتاب", callback_data="ai_analyze")],
+        [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
     ])
 
     await message.answer(
@@ -717,36 +568,24 @@ async def ai_panel(message: types.Message):
         reply_markup=keyboard
     )
 
-
 # ===== خلاصه‌سازی کتاب با جیمینای =====
 @router.callback_query(lambda c: c.data == "ai_summarize")
 async def ai_summarize_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_summarize"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_summarize"}
 
     await call.message.edit_text(
         "📝 **آیدی کتاب رو برای خلاصه‌سازی بفرست:**\n\n"
         "🤖 جیمینای خلاصه‌ای حرفه‌ای از کتاب تولید میکنه."
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_summarize"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_summarize")
 async def ai_summarize_confirm(message: types.Message):
-
     try:
         book_id = int(message.text)
         book = get_book(book_id)
 
         if not book:
-            await message.answer(
-                "❌ کتاب پیدا نشد!"
-            )
-
+            await message.answer("❌ کتاب پیدا نشد!")
             user_states[message.from_user.id] = {}
             return
 
@@ -759,13 +598,10 @@ async def ai_summarize_confirm(message: types.Message):
                 "❌ کلید جیمینای تنظیم نشده! "
                 "لطفاً GEMINI_API_KEY رو توی Secrets ریپلیت تنظیم کن."
             )
-
             user_states[message.from_user.id] = {}
             return
 
-        summary = await get_gemini_summary(
-            book[6]
-        )
+        summary = await get_gemini_summary(book[6])
 
         if summary:
             await message.answer(
@@ -773,29 +609,23 @@ async def ai_summarize_confirm(message: types.Message):
                 f"{summary}\n\n"
                 f"🤖 تولید شده توسط Gemini AI"
             )
-
         else:
             await message.answer(
-                "❌ خطا در خلاصه‌سازی! "
+                "❌ خطا در خلاصه‌سازی!\n"
                 "جزئیات خطا در Console ریپلیت ثبت شده."
             )
 
     except Exception as e:
-        print(f"❌ Summarize Exception: {e}")
-
         await message.answer(
             f"❌ خطا: {str(e)[:500]}"
         )
 
     user_states[message.from_user.id] = {}
 
-
 # ===== تحلیل کتاب با جیمینای =====
 @router.callback_query(lambda c: c.data == "ai_analyze")
 async def ai_analyze_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_analyze"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_analyze"}
 
     await call.message.edit_text(
         "📊 **آیدی کتاب رو برای تحلیل بفرست:**\n\n"
@@ -806,23 +636,14 @@ async def ai_analyze_start(call: types.CallbackQuery):
         "• نکات کلیدی"
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_analyze"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_analyze")
 async def ai_analyze_confirm(message: types.Message):
-
     try:
         book_id = int(message.text)
         book = get_book(book_id)
 
         if not book:
-            await message.answer(
-                "❌ کتاب پیدا نشد!"
-            )
-
+            await message.answer("❌ کتاب پیدا نشد!")
             user_states[message.from_user.id] = {}
             return
 
@@ -834,13 +655,10 @@ async def ai_analyze_confirm(message: types.Message):
             await message.answer(
                 "❌ کلید جیمینای تنظیم نشده!"
             )
-
             user_states[message.from_user.id] = {}
             return
 
-        analysis = await get_gemini_analysis(
-            book[6]
-        )
+        analysis = await get_gemini_analysis(book[6])
 
         if analysis:
             await message.answer(
@@ -848,28 +666,22 @@ async def ai_analyze_confirm(message: types.Message):
                 f"{analysis}\n\n"
                 f"🤖 تحلیل شده توسط Gemini AI"
             )
-
         else:
             await message.answer(
                 "❌ خطا در تحلیل کتاب!"
             )
 
     except Exception as e:
-        print(f"❌ Analyze Exception: {e}")
-
         await message.answer(
             f"❌ خطا: {str(e)[:500]}"
         )
 
     user_states[message.from_user.id] = {}
 
-
 # ===== چت با جیمینای =====
 @router.callback_query(lambda c: c.data == "ai_chat")
 async def ai_chat_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {
-        "state": "waiting_ai_chat"
-    }
+    user_states[call.from_user.id] = {"state": "waiting_ai_chat"}
 
     await call.message.edit_text(
         "💬 **چت با جیمینای**\n\n"
@@ -877,21 +689,12 @@ async def ai_chat_start(call: types.CallbackQuery):
         "برای بستن /cancel بفرست."
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_ai_chat"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_ai_chat")
 async def ai_chat_response(message: types.Message):
 
     if message.text == "/cancel":
         user_states[message.from_user.id] = {}
-
-        await message.answer(
-            "✅ چت بسته شد!"
-        )
-
+        await message.answer("✅ چت بسته شد!")
         return
 
     if not GEMINI_API_KEY:
@@ -899,25 +702,21 @@ async def ai_chat_response(message: types.Message):
             "❌ کلید جیمینای تنظیم نشده! "
             "لطفاً GEMINI_API_KEY رو توی Secrets ریپلیت تنظیم کن."
         )
-
         return
 
     await message.answer(
         "🤔 دارم از جیمینای میپرسم..."
     )
 
-    response = await get_gemini_response(
-        message.text
-    )
+    response = await get_gemini_response(message.text)
 
     if response:
         await message.answer(response)
     else:
         await message.answer(
             "❌ خطا در ارتباط با جیمینای!\n"
-            "جزئیات خطا رو در Console ریپلیت ببین."
+            "لطفاً دوباره امتحان کن."
         )
-
 
 # ========================================
 # ===== توابع ارتباط با جیمینای =====
@@ -939,8 +738,8 @@ async def get_gemini_summary(file_id):
         )
 
         prompt = (
-            "این متن کتاب را به زبان فارسی خلاصه کن.\n"
-            "خلاصه حداکثر ۱۰ خط و واضح باشد:\n\n"
+            "این متن کتاب را به زبان فارسی خلاصه کن. "
+            "خلاصه حداکثر ۱۰ خط باشد:\n\n"
             f"{text[:5000]}"
         )
 
@@ -957,7 +756,6 @@ async def get_gemini_summary(file_id):
         }
 
         async with aiohttp.ClientSession() as session:
-
             async with session.post(
                 url,
                 json=payload,
@@ -972,39 +770,30 @@ async def get_gemini_summary(file_id):
                     data = {}
 
                 if response.status == 200:
-
                     return (
-                        data
-                        .get("candidates", [{}])[0]
+                        data.get("candidates", [{}])[0]
                         .get("content", {})
                         .get("parts", [{}])[0]
                         .get("text", "")
                     )
 
                 error = data.get("error", {})
+                error_message = error.get(
+                    "message",
+                    response_text
+                )
 
                 print(
                     f"❌ Gemini Summary Error "
-                    f"{response.status}: "
-                    f"{error.get('message', response_text)}"
+                    f"{response.status}: {error_message}"
                 )
 
                 return None
 
-    except asyncio.TimeoutError:
-
-        print(
-            "❌ Gemini Summary Timeout"
-        )
-
-        return None
-
     except Exception as e:
-
         print(
             f"❌ خطا در خلاصه‌سازی Gemini: {e}"
         )
-
         return None
 
 
@@ -1024,15 +813,13 @@ async def get_gemini_analysis(file_id):
         )
 
         prompt = f"""
-این کتاب را به زبان فارسی تحلیل کن.
-
-موارد زیر را بررسی کن:
+کتاب زیر را به زبان فارسی تحلیل کن.
 
 ۱. شخصیت‌های اصلی
 ۲. تم‌های اصلی
 ۳. سبک نوشتاری
 ۴. نکات کلیدی
-۵. پیام اصلی کتاب
+۵. پیام اصلی
 
 متن کتاب:
 
@@ -1052,7 +839,6 @@ async def get_gemini_analysis(file_id):
         }
 
         async with aiohttp.ClientSession() as session:
-
             async with session.post(
                 url,
                 json=payload,
@@ -1067,39 +853,30 @@ async def get_gemini_analysis(file_id):
                     data = {}
 
                 if response.status == 200:
-
                     return (
-                        data
-                        .get("candidates", [{}])[0]
+                        data.get("candidates", [{}])[0]
                         .get("content", {})
                         .get("parts", [{}])[0]
                         .get("text", "")
                     )
 
                 error = data.get("error", {})
+                error_message = error.get(
+                    "message",
+                    response_text
+                )
 
                 print(
                     f"❌ Gemini Analysis Error "
-                    f"{response.status}: "
-                    f"{error.get('message', response_text)}"
+                    f"{response.status}: {error_message}"
                 )
 
                 return None
 
-    except asyncio.TimeoutError:
-
-        print(
-            "❌ Gemini Analysis Timeout"
-        )
-
-        return None
-
     except Exception as e:
-
         print(
             f"❌ خطا در تحلیل Gemini: {e}"
         )
-
         return None
 
 
@@ -1107,14 +884,12 @@ async def get_gemini_response(prompt):
     """دریافت پاسخ از جیمینای"""
 
     try:
-
         if not GEMINI_API_KEY:
-
             print(
                 "❌ GEMINI_API_KEY تنظیم نشده!"
             )
 
-            return None
+            return "❌ GEMINI_API_KEY در Replit تنظیم نشده!"
 
         url = (
             "https://generativelanguage.googleapis.com/"
@@ -1153,9 +928,11 @@ async def get_gemini_response(prompt):
                 try:
                     data = json.loads(response_text)
                 except:
-
                     data = {}
 
+                # ========================================
+                # پاسخ موفق
+                # ========================================
                 if response.status == 200:
 
                     candidates = data.get(
@@ -1164,13 +941,13 @@ async def get_gemini_response(prompt):
                     )
 
                     if not candidates:
-
                         print(
-                            f"❌ Gemini پاسخ خالی داد: "
-                            f"{data}"
+                            f"❌ Gemini پاسخ خالی داد: {data}"
                         )
 
-                        return None
+                        return (
+                            "❌ جیمینای پاسخ خالی برگرداند."
+                        )
 
                     text = (
                         candidates[0]
@@ -1183,24 +960,39 @@ async def get_gemini_response(prompt):
                         return text
 
                     print(
-                        f"❌ Gemini متن پاسخ ندارد: "
-                        f"{data}"
+                        f"❌ Gemini متن پاسخ ندارد: {data}"
                     )
 
-                    return None
+                    return (
+                        "❌ جیمینای متن پاسخی برنگرداند."
+                    )
 
+                # ========================================
+                # خطای Gemini
+                # ========================================
                 error = data.get(
                     "error",
                     {}
                 )
 
+                error_message = error.get(
+                    "message",
+                    response_text
+                )
+
                 print(
                     f"❌ Gemini Error "
                     f"{response.status}: "
-                    f"{error.get('message', response_text)}"
+                    f"{error_message}"
                 )
 
-                return None
+                # نمایش خطای واقعی داخل تلگرام
+                return (
+                    f"❌ خطای Gemini\n\n"
+                    f"🔢 کد خطا: {response.status}\n\n"
+                    f"📄 دلیل:\n"
+                    f"{error_message[:1500]}"
+                )
 
     except asyncio.TimeoutError:
 
@@ -1208,7 +1000,21 @@ async def get_gemini_response(prompt):
             "❌ درخواست Gemini بیش از حد طول کشید."
         )
 
-        return None
+        return (
+            "❌ زمان درخواست به Gemini تمام شد. "
+            "دوباره امتحان کن."
+        )
+
+    except aiohttp.ClientError as e:
+
+        print(
+            f"❌ خطای اتصال به Gemini: {e}"
+        )
+
+        return (
+            "❌ اتصال به سرور Gemini برقرار نشد.\n\n"
+            f"جزئیات: {str(e)[:500]}"
+        )
 
     except Exception as e:
 
@@ -1216,17 +1022,18 @@ async def get_gemini_response(prompt):
             f"❌ خطا در ارتباط با Gemini: {e}"
         )
 
-        return None
+        return (
+            "❌ خطای داخلی هنگام ارتباط با Gemini:\n\n"
+            f"{str(e)[:1000]}"
+        )
 
 
 async def extract_text_from_file(file_id):
     """استخراج متن از فایل PDF (برای جیمینای)"""
 
     try:
-
-        # این قسمت مثل کد اصلی نگه داشته شده
-        # فعلاً متن نمونه برمی‌گرداند
-        # تا اتصال Gemini تست شود.
+        # این قسمت از کد اصلی حفظ شده است.
+        # فعلاً برای تست اتصال Gemini متن نمونه برمی‌گرداند.
 
         return (
             "این متن نمونه از کتاب است. "
@@ -1242,14 +1049,12 @@ async def extract_text_from_file(file_id):
 
         return None
 
-
 # ========================================
 # 📤 ارسال همگانی
 # ========================================
 
 @router.message(lambda m: m.text == "📤 ارسال همگانی" and m.from_user.id == ADMIN_ID)
 async def broadcast_start(message: types.Message):
-
     user_states[message.from_user.id] = {
         "state": "waiting_broadcast"
     }
@@ -1259,24 +1064,16 @@ async def broadcast_start(message: types.Message):
         "📝 پیام رو بفرست تا به همه کاربران ارسال بشه."
     )
 
-
-@router.message(
-    lambda m:
-    m.from_user.id == ADMIN_ID
-    and user_states.get(m.from_user.id, {}).get("state") == "waiting_broadcast"
-)
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_broadcast")
 async def broadcast_confirm(message: types.Message):
-
     users = get_all_users()
 
     if not users:
-
         await message.answer(
             "❌ هیچ کاربری وجود نداره!"
         )
 
         user_states[message.from_user.id] = {}
-
         return
 
     await message.answer(
@@ -1286,16 +1083,13 @@ async def broadcast_confirm(message: types.Message):
     success = 0
 
     for user_id, username, full_name in users:
-
         try:
-
             await message.bot.send_message(
                 user_id,
                 message.text
             )
 
             success += 1
-
             await asyncio.sleep(0.05)
 
         except:
@@ -1307,14 +1101,12 @@ async def broadcast_confirm(message: types.Message):
 
     user_states[message.from_user.id] = {}
 
-
 # ========================================
 # 💾 بکاپ و بازیابی
 # ========================================
 
 @router.message(lambda m: m.text == "💾 بکاپ و بازیابی" and m.from_user.id == ADMIN_ID)
 async def backup_panel(message: types.Message):
-
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -1335,10 +1127,8 @@ async def backup_panel(message: types.Message):
         reply_markup=keyboard
     )
 
-
 @router.callback_query(lambda c: c.data == "backup_db")
 async def backup_db_callback(call: types.CallbackQuery):
-
     result = backup_db()
 
     if result:
@@ -1350,16 +1140,14 @@ async def backup_db_callback(call: types.CallbackQuery):
             "❌ خطا در گرفتن بکاپ!"
         )
 
-
 # ========================================
 # 🔙 برگشت به پنل
 # ========================================
 
 @router.callback_query(lambda c: c.data == "back_to_panel")
 async def back_to_panel(call: types.CallbackQuery):
-
     await call.message.edit_text(
         "⚙️ **پنل مدیریت**\n\n"
         "📊 از دکمه‌های زیر استفاده کن:",
         reply_markup=get_admin_keyboard()
-)
+    )
