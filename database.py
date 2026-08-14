@@ -17,13 +17,15 @@ c = db.cursor()
 # ===== ساخت جدول‌ها =====
 # ========================================
 
-# جدول کتاب‌ها
+# ===== جدول کتاب‌ها (با فیلدهای جدید: ژانر و جلد) =====
 c.execute("""
     CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         author TEXT,
         description TEXT,
+        genre TEXT,
+        cover_file_id TEXT,
         file_id TEXT NOT NULL,
         file_name TEXT,
         file_size INTEGER,
@@ -32,14 +34,14 @@ c.execute("""
     )
 """)
 
-# جدول کانال‌های اجباری
+# ===== جدول کانال‌های اجباری =====
 c.execute("""
     CREATE TABLE IF NOT EXISTS channels (
         username TEXT PRIMARY KEY
     )
 """)
 
-# جدول بنر
+# ===== جدول بنر =====
 c.execute("""
     CREATE TABLE IF NOT EXISTS banner (
         type TEXT DEFAULT 'text',
@@ -48,7 +50,7 @@ c.execute("""
     )
 """)
 
-# جدول کاربران
+# ===== جدول کاربران =====
 c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
@@ -59,35 +61,37 @@ c.execute("""
 """)
 
 db.commit()
-print("✅ دیتابیس راه‌اندازی شد!")
+print("✅ دیتابیس با فیلدهای جدید راه‌اندازی شد!")
 
+# ========================================
 # ========================================
 # ===== توابع کتاب‌ها =====
 # ========================================
+# ========================================
 
-def add_book(title, author, description, file_id, file_name="", file_size=0):
-    """افزودن کتاب جدید به دیتابیس"""
+def add_book(title, author, description, genre, cover_file_id, file_id, file_name="", file_size=0):
+    """افزودن کتاب جدید با جلد و ژانر"""
     now = datetime.now().isoformat()
     c.execute("""
-        INSERT INTO books (title, author, description, file_id, file_name, file_size, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (title, author, description, file_id, file_name, file_size, now))
+        INSERT INTO books (title, author, description, genre, cover_file_id, file_id, file_name, file_size, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, now))
     db.commit()
     return c.lastrowid
 
 def get_all_books():
-    """دریافت لیست همه کتاب‌ها"""
+    """دریافت لیست همه کتاب‌ها با اطلاعات کامل"""
     c.execute("""
-        SELECT id, title, author, description, file_id, file_name, downloads
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
         ORDER BY created_at DESC
     """)
     return c.fetchall()
 
 def get_book(book_id):
-    """دریافت اطلاعات یک کتاب با آیدی"""
+    """دریافت اطلاعات کامل یک کتاب با آیدی"""
     c.execute("""
-        SELECT id, title, author, description, file_id, file_name
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
         WHERE id=?
     """, (book_id,))
@@ -106,13 +110,23 @@ def increment_download(book_id):
     return True
 
 def search_books(query):
-    """جستجوی کتاب‌ها بر اساس عنوان، نویسنده یا توضیحات"""
+    """جستجوی کتاب‌ها در عنوان، نویسنده، توضیحات و ژانر"""
     c.execute("""
-        SELECT id, title, author, description, file_id, file_name, downloads
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
-        WHERE title LIKE ? OR author LIKE ? OR description LIKE ?
+        WHERE title LIKE ? OR author LIKE ? OR description LIKE ? OR genre LIKE ?
         ORDER BY created_at DESC
-    """, (f"%{query}%", f"%{query}%", f"%{query}%"))
+    """, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
+    return c.fetchall()
+
+def get_books_by_genre(genre):
+    """دریافت کتاب‌های یک ژانر خاص"""
+    c.execute("""
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
+        FROM books
+        WHERE genre = ?
+        ORDER BY created_at DESC
+    """, (genre,))
     return c.fetchall()
 
 def get_book_count():
@@ -126,8 +140,20 @@ def get_total_downloads():
     result = c.fetchone()[0]
     return result if result else 0
 
+def get_popular_books(limit=5):
+    """دریافت کتاب‌های پربازدید"""
+    c.execute("""
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
+        FROM books
+        ORDER BY downloads DESC
+        LIMIT ?
+    """, (limit,))
+    return c.fetchall()
+
+# ========================================
 # ========================================
 # ===== توابع کانال‌ها =====
+# ========================================
 # ========================================
 
 def add_channel(username):
@@ -153,7 +179,9 @@ def get_channels_count():
     return c.fetchone()[0]
 
 # ========================================
+# ========================================
 # ===== توابع بنر =====
+# ========================================
 # ========================================
 
 def set_banner(banner_type, file_id=None, text=""):
@@ -178,7 +206,9 @@ def delete_banner():
     return True
 
 # ========================================
+# ========================================
 # ===== توابع کاربران =====
+# ========================================
 # ========================================
 
 def add_user(user_id, username="", full_name=""):
@@ -201,8 +231,15 @@ def get_user_count():
     c.execute("SELECT COUNT(*) FROM users")
     return c.fetchone()[0]
 
+def get_user(user_id):
+    """دریافت اطلاعات یک کاربر"""
+    c.execute("SELECT user_id, username, full_name, join_date FROM users WHERE user_id=?", (user_id,))
+    return c.fetchone()
+
+# ========================================
 # ========================================
 # ===== توابع کمکی =====
+# ========================================
 # ========================================
 
 def backup_db():
@@ -230,4 +267,14 @@ def clear_all_data():
     db.commit()
     return True
 
+def get_db_stats():
+    """دریافت آمار کامل دیتابیس"""
+    return {
+        "books": get_book_count(),
+        "channels": get_channels_count(),
+        "users": get_user_count(),
+        "total_downloads": get_total_downloads()
+    }
+
 print("✅ تمام توابع دیتابیس بارگذاری شدند!")
+print(f"📁 مسیر دیتابیس: {DB_PATH}")
