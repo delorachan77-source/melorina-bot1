@@ -85,7 +85,7 @@ async def check_mem_inline(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 📚 مدیریت کتاب‌ها
+# 📚 مدیریت کتاب‌ها (با جلد و ژانر)
 # ========================================
 # ========================================
 
@@ -96,11 +96,12 @@ async def manage_books(message: types.Message):
         [InlineKeyboardButton(text="📋 لیست کتاب‌ها", callback_data="list_books")],
         [InlineKeyboardButton(text="🗑 حذف کتاب", callback_data="delete_book")],
         [InlineKeyboardButton(text="🔍 جستجوی کتاب", callback_data="search_book")],
+        [InlineKeyboardButton(text="📂 کتاب‌های یک ژانر", callback_data="genre_books")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
     ])
     await message.answer("📚 **مدیریت کتاب‌ها**", reply_markup=keyboard)
 
-# ===== افزودن کتاب =====
+# ===== افزودن کتاب (با جلد و ژانر) =====
 @router.callback_query(lambda c: c.data == "add_book")
 async def add_book_start(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
@@ -120,6 +121,15 @@ async def get_author(message: types.Message):
         user_states[message.from_user.id]["author"] = ""
     else:
         user_states[message.from_user.id]["author"] = message.text
+    user_states[message.from_user.id]["state"] = "waiting_genre"
+    await message.answer("📂 **ژانر کتاب رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_genre")
+async def get_genre(message: types.Message):
+    if message.text == "/skip":
+        user_states[message.from_user.id]["genre"] = ""
+    else:
+        user_states[message.from_user.id]["genre"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_description"
     await message.answer("📝 **توضیحات کتاب رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
@@ -129,27 +139,41 @@ async def get_description(message: types.Message):
         user_states[message.from_user.id]["description"] = ""
     else:
         user_states[message.from_user.id]["description"] = message.text
-    user_states[message.from_user.id]["state"] = "waiting_file"
-    await message.answer("📄 **حالا فایل کتاب رو بفرست (PDF/ZIP):**")
+    user_states[message.from_user.id]["state"] = "waiting_cover"
+    await message.answer("🖼 **عکس جلد کتاب رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_cover")
+async def get_cover(message: types.Message):
+    if message.text == "/skip":
+        user_states[message.from_user.id]["cover"] = ""
+        user_states[message.from_user.id]["state"] = "waiting_file"
+        await message.answer("📄 **حالا فایل کتاب رو بفرست (PDF/ZIP):**")
+        return
+    
+    if message.photo:
+        user_states[message.from_user.id]["cover"] = message.photo[-1].file_id
+        user_states[message.from_user.id]["state"] = "waiting_file"
+        await message.answer("📄 **حالا فایل کتاب رو بفرست (PDF/ZIP):**")
+    else:
+        await message.answer("❌ لطفاً یک عکس بفرست یا /skip بزن!")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and m.document and user_states.get(m.from_user.id, {}).get("state") == "waiting_file")
 async def get_file(message: types.Message):
     data = user_states[message.from_user.id]
-    title = data.get("title")
-    author = data.get("author", "")
-    description = data.get("description", "")
     
     add_book(
-        title=title,
-        author=author,
-        description=description,
+        title=data.get("title"),
+        author=data.get("author", ""),
+        description=data.get("description", ""),
+        genre=data.get("genre", ""),
+        cover_file_id=data.get("cover", ""),
         file_id=message.document.file_id,
         file_name=message.document.file_name or "",
         file_size=message.document.file_size or 0
     )
     
     user_states[message.from_user.id] = {}
-    await message.answer(f"✅ **کتاب «{title}» با موفقیت اضافه شد!**")
+    await message.answer(f"✅ **کتاب «{data.get('title')}» با موفقیت اضافه شد!**")
 
 # ===== لیست کتاب‌ها =====
 @router.callback_query(lambda c: c.data == "list_books")
@@ -160,7 +184,7 @@ async def list_books(call: types.CallbackQuery):
         return
     text = "📋 **لیست کتاب‌ها:**\n\n"
     for book in books[:10]:
-        text += f"• `{book[0]}` - {book[1]} (دانلود: {book[6]})\n"
+        text += f"• `{book[0]}` - {book[1]} (دانلود: {book[8]})\n"
     if len(books) > 10:
         text += f"\n... و {len(books) - 10} کتاب دیگه"
     await call.message.edit_text(text)
@@ -200,9 +224,30 @@ async def search_book_confirm(message: types.Message):
         return
     text = f"🔍 **نتایج جستجو برای «{query}»:**\n\n"
     for book in results[:5]:
-        text += f"• `{book[0]}` - {book[1]} (دانلود: {book[6]})\n"
+        text += f"• `{book[0]}` - {book[1]} (دانلود: {book[8]})\n"
     if len(results) > 5:
         text += f"\n... و {len(results) - 5} نتیجه دیگه"
+    await message.answer(text)
+    user_states[message.from_user.id] = {}
+
+# ===== کتاب‌های یک ژانر =====
+@router.callback_query(lambda c: c.data == "genre_books")
+async def genre_books_start(call: types.CallbackQuery):
+    user_states[call.from_user.id] = {"state": "waiting_genre_list"}
+    await call.message.edit_text("📂 **نام ژانر رو بفرست:**")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_genre_list")
+async def genre_books_confirm(message: types.Message):
+    genre = message.text
+    books = get_books_by_genre(genre)
+    if not books:
+        await message.answer(f"❌ هیچ کتابی در ژانر «{genre}» پیدا نشد!")
+        return
+    text = f"📂 **کتاب‌های ژانر «{genre}»:**\n\n"
+    for book in books[:10]:
+        text += f"• `{book[0]}` - {book[1]}\n"
+    if len(books) > 10:
+        text += f"\n... و {len(books) - 10} کتاب دیگه"
     await message.answer(text)
     user_states[message.from_user.id] = {}
 
@@ -336,12 +381,12 @@ async def advanced_stats(message: types.Message):
     books = get_all_books()
     channels = get_channels()
     users = get_user_count()
-    total_downloads = sum(book[6] for book in books)
+    total_downloads = sum(book[8] for book in books)
     
-    popular = sorted(books, key=lambda x: x[6], reverse=True)
+    popular = sorted(books, key=lambda x: x[8], reverse=True)
     popular_text = ""
     if popular:
-        popular_text = f"🏆 **کتاب پرفروش:** {popular[0][1]} ({popular[0][6]} دانلود)"
+        popular_text = f"🏆 **کتاب پرفروش:** {popular[0][1]} ({popular[0][8]} دانلود)"
     
     await message.answer(
         f"📊 **آمار پیشرفته ربات:**\n\n"
