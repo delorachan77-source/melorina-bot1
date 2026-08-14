@@ -2,11 +2,22 @@ import sqlite3
 import os
 from datetime import datetime
 
+# ========================================
+# ===== تنظیم مسیر دیتابیس =====
+# ========================================
 DB_PATH = os.getenv("DB_PATH", "bot.db")
+
+# ========================================
+# ===== اتصال به دیتابیس =====
+# ========================================
 db = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = db.cursor()
 
-# ===== جدول کتاب‌ها =====
+# ========================================
+# ===== ساخت جدول‌ها =====
+# ========================================
+
+# جدول کتاب‌ها
 c.execute("""
     CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,14 +32,14 @@ c.execute("""
     )
 """)
 
-# ===== جدول کانال‌های اجباری =====
+# جدول کانال‌های اجباری
 c.execute("""
     CREATE TABLE IF NOT EXISTS channels (
         username TEXT PRIMARY KEY
     )
 """)
 
-# ===== جدول بنر =====
+# جدول بنر
 c.execute("""
     CREATE TABLE IF NOT EXISTS banner (
         type TEXT DEFAULT 'text',
@@ -37,12 +48,25 @@ c.execute("""
     )
 """)
 
+# جدول کاربران
+c.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        full_name TEXT,
+        join_date TEXT
+    )
+""")
+
 db.commit()
+print("✅ دیتابیس راه‌اندازی شد!")
 
 # ========================================
-# ===== توابع کتاب =====
+# ===== توابع کتاب‌ها =====
 # ========================================
+
 def add_book(title, author, description, file_id, file_name="", file_size=0):
+    """افزودن کتاب جدید به دیتابیس"""
     now = datetime.now().isoformat()
     c.execute("""
         INSERT INTO books (title, author, description, file_id, file_name, file_size, created_at)
@@ -52,22 +76,37 @@ def add_book(title, author, description, file_id, file_name="", file_size=0):
     return c.lastrowid
 
 def get_all_books():
-    c.execute("SELECT id, title, author, description, file_id, file_name, downloads FROM books ORDER BY created_at DESC")
+    """دریافت لیست همه کتاب‌ها"""
+    c.execute("""
+        SELECT id, title, author, description, file_id, file_name, downloads
+        FROM books
+        ORDER BY created_at DESC
+    """)
     return c.fetchall()
 
 def get_book(book_id):
-    c.execute("SELECT id, title, author, description, file_id, file_name FROM books WHERE id=?", (book_id,))
+    """دریافت اطلاعات یک کتاب با آیدی"""
+    c.execute("""
+        SELECT id, title, author, description, file_id, file_name
+        FROM books
+        WHERE id=?
+    """, (book_id,))
     return c.fetchone()
 
 def delete_book(book_id):
+    """حذف کتاب با آیدی"""
     c.execute("DELETE FROM books WHERE id=?", (book_id,))
     db.commit()
+    return True
 
 def increment_download(book_id):
+    """افزایش تعداد دانلود کتاب"""
     c.execute("UPDATE books SET downloads = downloads + 1 WHERE id=?", (book_id,))
     db.commit()
+    return True
 
 def search_books(query):
+    """جستجوی کتاب‌ها بر اساس عنوان، نویسنده یا توضیحات"""
     c.execute("""
         SELECT id, title, author, description, file_id, file_name, downloads
         FROM books
@@ -76,30 +115,56 @@ def search_books(query):
     """, (f"%{query}%", f"%{query}%", f"%{query}%"))
     return c.fetchall()
 
+def get_book_count():
+    """تعداد کل کتاب‌ها"""
+    c.execute("SELECT COUNT(*) FROM books")
+    return c.fetchone()[0]
+
+def get_total_downloads():
+    """تعداد کل دانلودها"""
+    c.execute("SELECT SUM(downloads) FROM books")
+    result = c.fetchone()[0]
+    return result if result else 0
+
 # ========================================
 # ===== توابع کانال‌ها =====
 # ========================================
+
 def add_channel(username):
+    """افزودن کانال به لیست عضویت اجباری"""
     c.execute("INSERT OR IGNORE INTO channels VALUES (?)", (username,))
     db.commit()
+    return True
 
 def get_channels():
+    """دریافت لیست کانال‌های اجباری"""
     c.execute("SELECT username FROM channels")
     return [row[0] for row in c.fetchall()]
 
 def delete_channel(username):
+    """حذف کانال از لیست عضویت اجباری"""
     c.execute("DELETE FROM channels WHERE username=?", (username,))
     db.commit()
+    return True
+
+def get_channels_count():
+    """تعداد کانال‌های اجباری"""
+    c.execute("SELECT COUNT(*) FROM channels")
+    return c.fetchone()[0]
 
 # ========================================
 # ===== توابع بنر =====
 # ========================================
+
 def set_banner(banner_type, file_id=None, text=""):
+    """تنظیم بنر جدید (جایگزین بنر قبلی)"""
     c.execute("DELETE FROM banner")
     c.execute("INSERT INTO banner VALUES (?,?,?)", (banner_type, file_id, text))
     db.commit()
+    return True
 
 def get_banner():
+    """دریافت بنر فعلی"""
     c.execute("SELECT type, file_id, text FROM banner")
     row = c.fetchone()
     if row:
@@ -107,5 +172,62 @@ def get_banner():
     return {"type": "text", "file_id": None, "text": "📢 به ربات خوش اومدی!"}
 
 def delete_banner():
+    """حذف بنر فعلی"""
     c.execute("DELETE FROM banner")
     db.commit()
+    return True
+
+# ========================================
+# ===== توابع کاربران =====
+# ========================================
+
+def add_user(user_id, username="", full_name=""):
+    """ثبت کاربر جدید در دیتابیس"""
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT OR IGNORE INTO users (user_id, username, full_name, join_date)
+        VALUES (?, ?, ?, ?)
+    """, (user_id, username, full_name, now))
+    db.commit()
+    return True
+
+def get_all_users():
+    """دریافت لیست همه کاربران"""
+    c.execute("SELECT user_id, username, full_name, join_date FROM users")
+    return c.fetchall()
+
+def get_user_count():
+    """تعداد کل کاربران"""
+    c.execute("SELECT COUNT(*) FROM users")
+    return c.fetchone()[0]
+
+# ========================================
+# ===== توابع کمکی =====
+# ========================================
+
+def backup_db():
+    """گرفتن بکاپ از دیتابیس"""
+    import shutil
+    if os.path.exists(DB_PATH):
+        shutil.copy(DB_PATH, f"{DB_PATH}.backup")
+        return True
+    return False
+
+def restore_db():
+    """بازیابی دیتابیس از بکاپ"""
+    import shutil
+    if os.path.exists(f"{DB_PATH}.backup"):
+        shutil.copy(f"{DB_PATH}.backup", DB_PATH)
+        return True
+    return False
+
+def clear_all_data():
+    """پاک کردن همه داده‌ها (فقط برای مدیریت)"""
+    c.execute("DELETE FROM books")
+    c.execute("DELETE FROM channels")
+    c.execute("DELETE FROM banner")
+    c.execute("DELETE FROM users")
+    db.commit()
+    return True
+
+print("✅ تمام توابع دیتابیس بارگذاری شدند!")
