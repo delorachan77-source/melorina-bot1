@@ -22,13 +22,13 @@ PERSONALITIES = {
 }
 
 # ========================================
-# ===== کیبورد منوی کاربر =====
+# ===== کیبورد منوی کاربر (فقط چت) =====
 # ========================================
 def user_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📚 کتاب‌ها")],
-            [KeyboardButton(text="💬 چت با جیمینای")],
+            [KeyboardButton(text="💬 چت")],  # ← فقط چت
             [KeyboardButton(text="💬 نظر و پیشنهاد")],
             [KeyboardButton(text="⭐ امتیاز به ربات")],
         ],
@@ -169,9 +169,9 @@ async def save_rating(call: types.CallbackQuery):
     await call.answer("✅ امتیاز ثبت شد!")
 
 # ========================================
-# ===== چت با جیمینای برای کاربر =====
+# ===== چت با جیمینای (برای کاربر) =====
 # ========================================
-@router.message(lambda m: m.text == "💬 چت با جیمینای")
+@router.message(lambda m: m.text == "💬 چت")
 async def user_ai_chat_start(message: types.Message):
     user_states[message.from_user.id] = {"state": "waiting_user_ai_chat"}
     await message.answer("💬 **چت با جیمینای**\n\nهر چی دوست داری بپرس! 😊\nبرای بستن /cancel بفرست.")
@@ -197,7 +197,7 @@ async def user_ai_chat_response(message: types.Message):
         await message.answer("❌ خطا در ارتباط با جیمینای!")
 
 # ========================================
-# ===== کتاب‌ها (لیست برای کاربر) =====
+# ===== کتاب‌ها (لیست) =====
 # ========================================
 @router.message(lambda m: m.text == "📚 کتاب‌ها")
 async def list_books_user(message: types.Message):
