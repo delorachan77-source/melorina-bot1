@@ -31,12 +31,14 @@ def join_keyboard():
 # ========================================
 
 async def send_banner(message):
-    """ارسال بنر به کاربر (متن، عکس یا ویدیو)"""
+    """ارسال بنر به کاربر (متن، عکس، ویدیو یا فایل)"""
     banner = get_banner()
     if banner["type"] == "photo" and banner["file_id"]:
         await message.answer_photo(banner["file_id"], caption=banner["text"])
     elif banner["type"] == "video" and banner["file_id"]:
         await message.answer_video(banner["file_id"], caption=banner["text"])
+    elif banner["type"] == "document" and banner["file_id"]:
+        await message.answer_document(banner["file_id"], caption=banner["text"])
     else:
         await message.answer(banner["text"])
 
@@ -107,6 +109,31 @@ async def download_book(call: types.CallbackQuery):
         caption=f"📖 **{title}**\n\n✅ دانلود شد!"
     )
     await call.answer("✅ دانلود شروع شد!")
+
+# ========================================
+# ========================================
+# ===== دریافت فایل با رمز (جدید) =====
+# ========================================
+# ========================================
+
+@router.message(lambda m: m.text and not m.text.startswith("/"))
+async def handle_password_file(message: types.Message):
+    """بررسی آیا متن ارسالی رمز فایل هست یا نه"""
+    # چک کن که آیا این متن یه رمز برای فایل هست یا نه
+    file_info = get_password_file_by_code(message.text.strip())
+    if file_info:
+        file_id, name, file_type, caption = file_info[2], file_info[1], file_info[3], file_info[4]
+        
+        # ارسال فایل
+        if file_type == "photo":
+            await message.answer_photo(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
+        elif file_type == "video":
+            await message.answer_video(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
+        else:
+            await message.answer_document(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
+        return
+    
+    # اگه رمز نبود، نادیده بگیر (چیزی نگو)
 
 # ========================================
 # ========================================
