@@ -6,7 +6,10 @@ DB_PATH = os.getenv("DB_PATH", "bot.db")
 db = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = db.cursor()
 
-# ===== جدول‌ها =====
+# ========================================
+# ===== ساخت جدول‌ها =====
+# ========================================
+
 c.execute("""
     CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -388,4 +391,3 @@ def get_db_stats():
     }
 
 print("✅ تمام توابع دیتابیس بارگذاری شدند!")
-print(f"📁 مسیر دیتابیس: {DB_PATH}")
