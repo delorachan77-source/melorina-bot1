@@ -60,6 +60,30 @@ c.execute("""
     )
 """)
 
+# ===== جدول رمز فایل (جدید) =====
+c.execute("""
+    CREATE TABLE IF NOT EXISTS password_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        password TEXT NOT NULL,
+        file_id TEXT NOT NULL,
+        file_type TEXT DEFAULT 'document',
+        caption TEXT,
+        created_at TEXT
+    )
+""")
+
+# ===== جدول فعالیت ادمین‌ها (جدید) =====
+c.execute("""
+    CREATE TABLE IF NOT EXISTS admin_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_id INTEGER,
+        action TEXT,
+        details TEXT,
+        created_at TEXT
+    )
+""")
+
 db.commit()
 print("✅ دیتابیس با فیلدهای جدید راه‌اندازی شد!")
 
@@ -238,6 +262,69 @@ def get_user(user_id):
 
 # ========================================
 # ========================================
+# ===== توابع رمز فایل (جدید) =====
+# ========================================
+# ========================================
+
+def add_password_file(name, password, file_id, file_type="document", caption=""):
+    """افزودن فایل با رمز"""
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT INTO password_files (name, password, file_id, file_type, caption, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (name, password, file_id, file_type, caption, now))
+    db.commit()
+    return c.lastrowid
+
+def get_password_file_by_code(code):
+    """دریافت فایل با رمز"""
+    c.execute("SELECT id, name, file_id, file_type, caption FROM password_files WHERE password=?", (code,))
+    return c.fetchone()
+
+def get_all_password_files():
+    """دریافت لیست همه فایل‌های رمزدار"""
+    c.execute("SELECT id, name, password, file_type FROM password_files ORDER BY created_at DESC")
+    return c.fetchall()
+
+def delete_password_file(file_id):
+    """حذف فایل رمزدار"""
+    c.execute("DELETE FROM password_files WHERE id=?", (file_id,))
+    db.commit()
+
+# ========================================
+# ========================================
+# ===== توابع فعالیت ادمین‌ها (جدید) =====
+# ========================================
+# ========================================
+
+def add_admin_activity(admin_id, action, details=""):
+    """ثبت فعالیت ادمین"""
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT INTO admin_activities (admin_id, action, details, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (admin_id, action, details, now))
+    db.commit()
+
+def get_admin_activities(admin_id=None, limit=20):
+    """دریافت فعالیت‌های ادمین"""
+    if admin_id:
+        c.execute("""
+            SELECT id, action, details, created_at FROM admin_activities
+            WHERE admin_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (admin_id, limit))
+    else:
+        c.execute("""
+            SELECT id, admin_id, action, details, created_at FROM admin_activities
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (limit,))
+    return c.fetchall()
+
+# ========================================
+# ========================================
 # ===== توابع کمکی =====
 # ========================================
 # ========================================
@@ -264,6 +351,8 @@ def clear_all_data():
     c.execute("DELETE FROM channels")
     c.execute("DELETE FROM banner")
     c.execute("DELETE FROM users")
+    c.execute("DELETE FROM password_files")
+    c.execute("DELETE FROM admin_activities")
     db.commit()
     return True
 
@@ -273,7 +362,8 @@ def get_db_stats():
         "books": get_book_count(),
         "channels": get_channels_count(),
         "users": get_user_count(),
-        "total_downloads": get_total_downloads()
+        "total_downloads": get_total_downloads(),
+        "password_files": len(get_all_password_files())
     }
 
 print("✅ تمام توابع دیتابیس بارگذاری شدند!")
