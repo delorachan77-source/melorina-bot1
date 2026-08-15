@@ -26,6 +26,7 @@ def get_admin_keyboard():
             [KeyboardButton(text="👥 مدیریت کاربران")],
             [KeyboardButton(text="📊 آمار پیشرفته")],
             [KeyboardButton(text="🤖 هوش مصنوعی")],
+            [KeyboardButton(text="📨 ارسال بنر به آیدی‌ها")],  # ← جدید
             [KeyboardButton(text="📤 ارسال همگانی")],
             [KeyboardButton(text="💾 بکاپ و بازیابی")],
             [KeyboardButton(text="🔙 بستن پنل")]
@@ -551,7 +552,8 @@ async def set_banner_start(call: types.CallbackQuery):
         "📝 **بنر رو بفرست**\n\n"
         "• متن\n"
         "• عکس\n"
-        "• ویدیو"
+        "• ویدیو\n"
+        "• فایل (PDF, ZIP و...)"
     )
 
 
@@ -591,6 +593,17 @@ async def set_banner_confirm(message: types.Message):
             "✅ بنر ویدیو ذخیره شد!"
         )
 
+    elif message.document:
+        set_banner(
+            "document",
+            message.document.file_id,
+            message.caption or ""
+        )
+
+        await message.answer(
+            "✅ بنر فایل ذخیره شد!"
+        )
+
     else:
         await message.answer(
             "❌ نوع فایل پشتیبانی نمیشه!"
@@ -621,6 +634,12 @@ async def view_banner(message: types.Message):
 
     elif banner["type"] == "video" and banner["file_id"]:
         await message.answer_video(
+            banner["file_id"],
+            caption=banner["text"]
+        )
+
+    elif banner["type"] == "document" and banner["file_id"]:
+        await message.answer_document(
             banner["file_id"],
             caption=banner["text"]
         )
@@ -917,7 +936,110 @@ async def ai_chat_response(message: types.Message):
         )
 
 # ========================================
+# ========================================
+# 📨 ارسال بنر به آیدی‌های مشخص (جدید)
+# ========================================
+# ========================================
+
+@router.message(lambda m: m.text == "📨 ارسال بنر به آیدی‌ها" and m.from_user.id == ADMIN_ID)
+async def send_banner_to_ids_start(message: types.Message):
+    user_states[message.from_user.id] = {"state": "waiting_banner_ids"}
+    await message.answer(
+        "📨 **ارسال بنر به آیدی‌ها**\n\n"
+        "لیست آیدی‌ها رو بفرست (با کاما یا خط جدید جدا کن):\n"
+        "مثال: `123456789, 987654321, 111222333`\n\n"
+        "⚠️ آیدی‌های تکراری رو تشخیص میدم و بهت میگم."
+    )
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_banner_ids")
+async def get_banner_ids(message: types.Message):
+    # پردازش آیدی‌ها
+    ids_text = message.text
+    ids = []
+    for part in ids_text.replace(",", " ").split():
+        try:
+            ids.append(int(part))
+        except:
+            pass
+    
+    # پیدا کردن تکراری‌ها
+    unique_ids = []
+    duplicates = []
+    for i in ids:
+        if i in unique_ids:
+            duplicates.append(i)
+        else:
+            unique_ids.append(i)
+    
+    if duplicates:
+        await message.answer(
+            f"⚠️ **آیدی‌های تکراری:**\n"
+            f"{', '.join(map(str, duplicates))}\n\n"
+            f"اگه میخوای بهشون هم پیام بدی، بگو «بله»\n"
+            f"اگه نه، بگو «نه»"
+        )
+        user_states[message.from_user.id] = {
+            "state": "waiting_duplicate_decision",
+            "ids": unique_ids,
+            "duplicates": duplicates
+        }
+        return
+    
+    user_states[message.from_user.id] = {"state": "waiting_banner_content", "ids": unique_ids}
+    await message.answer(
+        f"✅ {len(unique_ids)} آیدی معتبر دریافت شد.\n\n"
+        f"📝 **حالا بنر رو بفرست**\n"
+        f"(متن، عکس، ویدیو یا فایل)"
+    )
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_duplicate_decision")
+async def handle_duplicate_decision(message: types.Message):
+    if message.text == "بله":
+        data = user_states[message.from_user.id]
+        all_ids = data.get("ids") + data.get("duplicates")
+        user_states[message.from_user.id] = {"state": "waiting_banner_content", "ids": all_ids}
+        await message.answer(f"✅ {len(all_ids)} آیدی (با تکراری‌ها) دریافت شد.\n\n📝 حالا بنر رو بفرست.")
+    else:
+        data = user_states[message.from_user.id]
+        user_states[message.from_user.id] = {"state": "waiting_banner_content", "ids": data.get("ids")}
+        await message.answer(f"✅ {len(data.get('ids'))} آیدی بدون تکراری دریافت شد.\n\n📝 حالا بنر رو بفرست.")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_banner_content")
+async def send_banner_to_ids(message: types.Message):
+    ids = user_states[message.from_user.id].get("ids", [])
+    
+    success = 0
+    failed = []
+    for user_id in ids:
+        try:
+            if message.text:
+                await message.bot.send_message(user_id, message.text)
+            elif message.photo:
+                await message.bot.send_photo(user_id, message.photo[-1].file_id, caption=message.caption or "")
+            elif message.video:
+                await message.bot.send_video(user_id, message.video.file_id, caption=message.caption or "")
+            elif message.document:
+                await message.bot.send_document(user_id, message.document.file_id, caption=message.caption or "")
+            success += 1
+        except:
+            failed.append(user_id)
+    
+    user_states[message.from_user.id] = {}
+    
+    result = f"✅ **نتیجه ارسال:**\n\n"
+    result += f"📤 موفق: {success} نفر\n"
+    if failed:
+        result += f"❌ ناموفق: {len(failed)} نفر\n"
+        result += f"آیدی‌های ناموفق: {', '.join(map(str, failed))}"
+    else:
+        result += "🎉 همه پیام‌ها با موفقیت ارسال شدند!"
+    
+    await message.answer(result)
+
+# ========================================
+# ========================================
 # ===== توابع ارتباط با جیمینای =====
+# ========================================
 # ========================================
 
 async def get_gemini_summary(file_id):
@@ -931,9 +1053,6 @@ async def get_gemini_summary(file_id):
         if not text:
             return None
 
-        # ========================================
-        # مدل اصلاح شد
-        # ========================================
         url = (
             "https://generativelanguage.googleapis.com/"
             "v1beta/models/gemini-3.5-flash:generateContent"
@@ -1042,9 +1161,6 @@ async def get_gemini_analysis(file_id):
         if not text:
             return None
 
-        # ========================================
-        # مدل اصلاح شد
-        # ========================================
         url = (
             "https://generativelanguage.googleapis.com/"
             "v1beta/models/gemini-3.5-flash:generateContent"
@@ -1165,9 +1281,6 @@ async def get_gemini_response(prompt):
                 "Replit تنظیم نشده!"
             )
 
-        # ========================================
-        # مدل اصلاح شد
-        # ========================================
         url = (
             "https://generativelanguage.googleapis.com/"
             "v1beta/models/gemini-3.5-flash:generateContent"
@@ -1216,9 +1329,6 @@ async def get_gemini_response(prompt):
                 except:
                     data = {}
 
-                # ========================================
-                # پاسخ موفق
-                # ========================================
                 if response.status == 200:
 
                     candidates = data.get(
@@ -1268,9 +1378,6 @@ async def get_gemini_response(prompt):
                         "برنگرداند."
                     )
 
-                # ========================================
-                # خطای Gemini
-                # ========================================
                 error = data.get(
                     "error",
                     {}
@@ -1336,10 +1443,6 @@ async def extract_text_from_file(file_id):
     """استخراج متن از فایل PDF"""
 
     try:
-
-        # این قسمت از کد اصلی حفظ شده.
-        # فعلاً برای تست اتصال Gemini
-        # متن نمونه برمی‌گرداند.
 
         return (
             "این متن نمونه از کتاب است. "
