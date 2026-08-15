@@ -26,9 +26,10 @@ def get_admin_keyboard():
             [KeyboardButton(text="👥 مدیریت کاربران")],
             [KeyboardButton(text="📊 آمار پیشرفته")],
             [KeyboardButton(text="🤖 هوش مصنوعی")],
-            [KeyboardButton(text="📨 ارسال بنر به آیدی‌ها")],  # ← جدید
+            [KeyboardButton(text="📨 ارسال بنر به آیدی‌ها")],
             [KeyboardButton(text="📤 ارسال همگانی")],
             [KeyboardButton(text="💾 بکاپ و بازیابی")],
+            [KeyboardButton(text="🔐 رمز فایل")],
             [KeyboardButton(text="🔙 بستن پنل")]
         ],
         resize_keyboard=True
@@ -553,7 +554,7 @@ async def set_banner_start(call: types.CallbackQuery):
         "• متن\n"
         "• عکس\n"
         "• ویدیو\n"
-        "• فایل (PDF, ZIP و...)"
+        "• فایل"
     )
 
 
@@ -937,7 +938,7 @@ async def ai_chat_response(message: types.Message):
 
 # ========================================
 # ========================================
-# 📨 ارسال بنر به آیدی‌های مشخص (جدید)
+# 📨 ارسال بنر به آیدی‌های مشخص
 # ========================================
 # ========================================
 
@@ -953,7 +954,6 @@ async def send_banner_to_ids_start(message: types.Message):
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_banner_ids")
 async def get_banner_ids(message: types.Message):
-    # پردازش آیدی‌ها
     ids_text = message.text
     ids = []
     for part in ids_text.replace(",", " ").split():
@@ -962,7 +962,6 @@ async def get_banner_ids(message: types.Message):
         except:
             pass
     
-    # پیدا کردن تکراری‌ها
     unique_ids = []
     duplicates = []
     for i in ids:
@@ -1038,495 +1037,29 @@ async def send_banner_to_ids(message: types.Message):
 
 # ========================================
 # ========================================
-# ===== توابع ارتباط با جیمینای =====
+# 🔐 سیستم رمز فایل (جدید)
 # ========================================
 # ========================================
 
-async def get_gemini_summary(file_id):
-    """دریافت خلاصه کتاب از جیمینای"""
-
-    try:
-        text = await extract_text_from_file(
-            file_id
-        )
-
-        if not text:
-            return None
-
-        url = (
-            "https://generativelanguage.googleapis.com/"
-            "v1beta/models/gemini-3.5-flash:generateContent"
-            f"?key={GEMINI_API_KEY}"
-        )
-
-        prompt = (
-            "این متن کتاب را به زبان فارسی "
-            "خلاصه کن. "
-            "خلاصه حداکثر ۱۰ خط باشد:\n\n"
-            f"{text[:5000]}"
-        )
-
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": prompt
-                        }
-                    ]
-                }
-            ]
-        }
-
-        headers = {
-            "Content-Type": "application/json"
-        }
-
-        async with aiohttp.ClientSession() as session:
-
-            async with session.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(
-                    total=60
-                )
-            ) as response:
-
-                response_text = await response.text()
-
-                try:
-                    data = json.loads(
-                        response_text
-                    )
-                except:
-                    data = {}
-
-                if response.status == 200:
-
-                    return (
-                        data.get(
-                            "candidates",
-                            [{}]
-                        )[0]
-                        .get(
-                            "content",
-                            {}
-                        )
-                        .get(
-                            "parts",
-                            [{}]
-                        )[0]
-                        .get(
-                            "text",
-                            ""
-                        )
-                    )
-
-                error = data.get(
-                    "error",
-                    {}
-                )
-
-                error_message = error.get(
-                    "message",
-                    response_text
-                )
-
-                print(
-                    f"❌ Gemini Summary Error "
-                    f"{response.status}: "
-                    f"{error_message}"
-                )
-
-                return None
-
-    except Exception as e:
-
-        print(
-            f"❌ خطا در خلاصه‌سازی Gemini: {e}"
-        )
-
-        return None
-
-
-async def get_gemini_analysis(file_id):
-    """تحلیل کتاب با جیمینای"""
-
-    try:
-        text = await extract_text_from_file(
-            file_id
-        )
-
-        if not text:
-            return None
-
-        url = (
-            "https://generativelanguage.googleapis.com/"
-            "v1beta/models/gemini-3.5-flash:generateContent"
-            f"?key={GEMINI_API_KEY}"
-        )
-
-        prompt = f"""
-کتاب زیر را به زبان فارسی تحلیل کن.
-
-۱. شخصیت‌های اصلی
-۲. تم‌های اصلی
-۳. سبک نوشتاری
-۴. نکات کلیدی
-۵. پیام اصلی
-
-متن کتاب:
-
-{text[:5000]}
-"""
-
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": prompt
-                        }
-                    ]
-                }
-            ]
-        }
-
-        headers = {
-            "Content-Type": "application/json"
-        }
-
-        async with aiohttp.ClientSession() as session:
-
-            async with session.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(
-                    total=60
-                )
-            ) as response:
-
-                response_text = await response.text()
-
-                try:
-                    data = json.loads(
-                        response_text
-                    )
-                except:
-                    data = {}
-
-                if response.status == 200:
-
-                    return (
-                        data.get(
-                            "candidates",
-                            [{}]
-                        )[0]
-                        .get(
-                            "content",
-                            {}
-                        )
-                        .get(
-                            "parts",
-                            [{}]
-                        )[0]
-                        .get(
-                            "text",
-                            ""
-                        )
-                    )
-
-                error = data.get(
-                    "error",
-                    {}
-                )
-
-                error_message = error.get(
-                    "message",
-                    response_text
-                )
-
-                print(
-                    f"❌ Gemini Analysis Error "
-                    f"{response.status}: "
-                    f"{error_message}"
-                )
-
-                return None
-
-    except Exception as e:
-
-        print(
-            f"❌ خطا در تحلیل Gemini: {e}"
-        )
-
-        return None
-
-
-async def get_gemini_response(prompt):
-    """دریافت پاسخ از جیمینای"""
-
-    try:
-
-        if not GEMINI_API_KEY:
-
-            print(
-                "❌ GEMINI_API_KEY تنظیم نشده!"
-            )
-
-            return (
-                "❌ GEMINI_API_KEY در "
-                "Replit تنظیم نشده!"
-            )
-
-        url = (
-            "https://generativelanguage.googleapis.com/"
-            "v1beta/models/gemini-3.5-flash:generateContent"
-            f"?key={GEMINI_API_KEY}"
-        )
-
-        full_prompt = (
-            "به فارسی پاسخ بده. "
-            "پاسخ‌هات کوتاه و مفید باشه:\n\n"
-            f"{prompt}"
-        )
-
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": full_prompt
-                        }
-                    ]
-                }
-            ]
-        }
-
-        headers = {
-            "Content-Type": "application/json"
-        }
-
-        async with aiohttp.ClientSession() as session:
-
-            async with session.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(
-                    total=60
-                )
-            ) as response:
-
-                response_text = await response.text()
-
-                try:
-                    data = json.loads(
-                        response_text
-                    )
-                except:
-                    data = {}
-
-                if response.status == 200:
-
-                    candidates = data.get(
-                        "candidates",
-                        []
-                    )
-
-                    if not candidates:
-
-                        print(
-                            "❌ Gemini پاسخ خالی داد:"
-                        )
-
-                        print(data)
-
-                        return (
-                            "❌ جیمینای پاسخ خالی "
-                            "برگرداند."
-                        )
-
-                    text = (
-                        candidates[0]
-                        .get(
-                            "content",
-                            {}
-                        )
-                        .get(
-                            "parts",
-                            [{}]
-                        )[0]
-                        .get(
-                            "text",
-                            ""
-                        )
-                    )
-
-                    if text:
-                        return text
-
-                    print(
-                        f"❌ Gemini متن پاسخ ندارد: "
-                        f"{data}"
-                    )
-
-                    return (
-                        "❌ جیمینای متن پاسخی "
-                        "برنگرداند."
-                    )
-
-                error = data.get(
-                    "error",
-                    {}
-                )
-
-                error_message = error.get(
-                    "message",
-                    response_text
-                )
-
-                print(
-                    f"❌ Gemini Error "
-                    f"{response.status}: "
-                    f"{error_message}"
-                )
-
-                return (
-                    f"❌ خطای Gemini\n\n"
-                    f"🔢 کد خطا: "
-                    f"{response.status}\n\n"
-                    f"📄 دلیل:\n"
-                    f"{error_message[:1500]}"
-                )
-
-    except asyncio.TimeoutError:
-
-        print(
-            "❌ درخواست Gemini "
-            "بیش از حد طول کشید."
-        )
-
-        return (
-            "❌ زمان درخواست به Gemini "
-            "تمام شد. دوباره امتحان کن."
-        )
-
-    except aiohttp.ClientError as e:
-
-        print(
-            f"❌ خطای اتصال به Gemini: {e}"
-        )
-
-        return (
-            "❌ اتصال به سرور Gemini "
-            "برقرار نشد.\n\n"
-            f"جزئیات: {str(e)[:500]}"
-        )
-
-    except Exception as e:
-
-        print(
-            f"❌ خطا در ارتباط با Gemini: {e}"
-        )
-
-        return (
-            "❌ خطای داخلی هنگام ارتباط "
-            "با Gemini:\n\n"
-            f"{str(e)[:1000]}"
-        )
-
-
-async def extract_text_from_file(file_id):
-    """استخراج متن از فایل PDF"""
-
-    try:
-
-        return (
-            "این متن نمونه از کتاب است. "
-            "برای دریافت متن واقعی، "
-            "باید فایل PDF دانلود و "
-            "پردازش شود."
-        )
-
-    except Exception as e:
-
-        print(
-            f"خطا در استخراج متن: {e}"
-        )
-
-        return None
-
-# ========================================
-# 📤 ارسال همگانی
-# ========================================
-
-@router.message(lambda m: m.text == "📤 ارسال همگانی" and m.from_user.id == ADMIN_ID)
-async def broadcast_start(message: types.Message):
-    user_states[message.from_user.id] = {
-        "state": "waiting_broadcast"
-    }
-
-    await message.answer(
-        "📤 **ارسال همگانی**\n\n"
-        "📝 پیام رو بفرست تا به همه کاربران ارسال بشه."
-    )
-
-
-@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_broadcast")
-async def broadcast_confirm(message: types.Message):
-    users = get_all_users()
-
-    if not users:
-
-        await message.answer(
-            "❌ هیچ کاربری وجود نداره!"
-        )
-
-        user_states[message.from_user.id] = {}
-        return
-
-    await message.answer(
-        f"📤 ارسال به {len(users)} کاربر شروع شد..."
-    )
-
-    success = 0
-
-    for user_id, username, full_name in users:
-
-        try:
-
-            await message.bot.send_message(
-                user_id,
-                message.text
-            )
-
-            success += 1
-
-            await asyncio.sleep(0.05)
-
-        except:
-            pass
-
-    await message.answer(
-        f"✅ پیام به {success} کاربر ارسال شد!"
-    )
-
-    user_states[message.from_user.id] = {}
-
-# ========================================
-# 💾 بکاپ و بازیابی
-# ========================================
-
-@router.message(lambda m: m.text == "💾 بکاپ و بازیابی" and m.from_user.id == ADMIN_ID)
-async def backup_panel(message: types.Message):
+@router.message(lambda m: m.text == "🔐 رمز فایل" and m.from_user.id == ADMIN_ID)
+async def manage_password_files(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
-                text="💾 گرفتن بکاپ",
-                callback_data="backup_db"
+                text="➕ افزودن فایل با رمز",
+                callback_data="add_password_file"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📋 لیست فایل‌های رمزدار",
+                callback_data="list_password_files"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🗑 حذف فایل رمزدار",
+                callback_data="delete_password_file"
             )
         ],
         [
@@ -1538,27 +1071,254 @@ async def backup_panel(message: types.Message):
     ])
 
     await message.answer(
-        "💾 **مدیریت بکاپ**",
+        "🔐 **سیستم رمز فایل**\n\n"
+        "با این بخش می‌تونی فایل‌ها رو با رمز محافظت کنی.\n"
+        "کاربر با وارد کردن رمز، فایل رو دریافت میکنه.",
         reply_markup=keyboard
     )
 
+# ===== افزودن فایل با رمز =====
+@router.callback_query(lambda c: c.data == "add_password_file")
+async def add_password_file_start(call: types.CallbackQuery):
+    user_states[call.from_user.id] = {"state": "waiting_pw_name"}
+    await call.message.edit_text(
+        "🔐 **افزودن فایل با رمز**\n\n"
+        "📝 **نام فایل رو بفرست:**\n"
+        "(این اسم برای شناسایی فایل استفاده میشه)"
+    )
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_pw_name")
+async def get_pw_name(message: types.Message):
+    user_states[message.from_user.id]["pw_name"] = message.text
+    user_states[message.from_user.id]["state"] = "waiting_pw_code"
+    await message.answer(
+        "🔑 **رمز فایل رو بفرست:**\n"
+        "(کاربر با وارد کردن این رمز، فایل رو دریافت میکنه)"
+    )
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_pw_code")
+async def get_pw_code(message: types.Message):
+    user_states[message.from_user.id]["pw_code"] = message.text
+    user_states[message.from_user.id]["state"] = "waiting_pw_file"
+    await message.answer(
+        "📄 **حالا فایل رو بفرست:**\n"
+        "(PDF, ZIP, عکس, ویدیو یا هر چیز دیگه)"
+    )
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_pw_file" and (m.document or m.photo or m.video))
+async def save_password_file(message: types.Message):
+    data = user_states[message.from_user.id]
+    name = data.get("pw_name")
+    code = data.get("pw_code")
+    
+    # تعیین نوع فایل
+    if message.document:
+        file_id = message.document.file_id
+        file_type = "document"
+    elif message.photo:
+        file_id = message.photo[-1].file_id
+        file_type = "photo"
+    elif message.video:
+        file_id = message.video.file_id
+        file_type = "video"
+    else:
+        await message.answer("❌ نوع فایل پشتیبانی نمیشه!")
+        return
+    
+    # ذخیره در دیتابیس
+    add_password_file(name, code, file_id, file_type, message.caption or "")
+    user_states[message.from_user.id] = {}
+    
+    await message.answer(
+        f"✅ **فایل با رمز ذخیره شد!**\n\n"
+        f"📝 نام: {name}\n"
+        f"🔑 رمز: `{code}`\n"
+        f"📂 نوع: {file_type}\n\n"
+        f"کاربر با ارسال رمز `{code}` می‌تونه فایل رو دریافت کنه."
+    )
+
+# ===== لیست فایل‌های رمزدار =====
+@router.callback_query(lambda c: c.data == "list_password_files")
+async def list_password_files(call: types.CallbackQuery):
+    files = get_all_password_files()
+    if not files:
+        await call.message.edit_text("❌ هیچ فایل رمز‌داری وجود نداره!")
+        return
+    
+    text = "🔐 **لیست فایل‌های رمزدار:**\n\n"
+    for f in files:
+        text += f"• {f[1]} (رمز: `{f[2]}`) - {f[3]}\n"
+    
+    await call.message.edit_text(text)
+
+# ===== حذف فایل رمزدار =====
+@router.callback_query(lambda c: c.data == "delete_password_file")
+async def delete_password_file_start(call: types.CallbackQuery):
+    files = get_all_password_files()
+    if not files:
+        await call.message.edit_text("❌ هیچ فایل رمز‌داری وجود نداره!")
+        return
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🗑 {f[1]}", callback_data=f"del_pw_{f[0]}")] for f in files
+    ] + [[InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]])
+    
+    await call.message.edit_text(
+        "🗑 **فایل رو برای حذف انتخاب کن:**",
+        reply_markup=keyboard
+    )
+
+@router.callback_query(lambda c: c.data.startswith("del_pw_"))
+async def delete_password_file_confirm(call: types.CallbackQuery):
+    file_id = int(call.data.replace("del_pw_", ""))
+    delete_password_file(file_id)
+    await call.message.edit_text("✅ فایل رمزدار حذف شد!")
+
+# ========================================
+# ========================================
+# ===== توابع ارتباط با جیمینای =====
+# ========================================
+# ========================================
+
+async def get_gemini_summary(file_id):
+    try:
+        text = await extract_text_from_file(file_id)
+        if not text:
+            return None
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
+
+        prompt = f"این متن کتاب را به زبان فارسی خلاصه کن. خلاصه حداکثر ۱۰ خط باشد:\n\n{text[:5000]}"
+
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        headers = {"Content-Type": "application/json"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers, timeout=60) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return None
+    except Exception as e:
+        print(f"❌ خطا: {e}")
+        return None
+
+async def get_gemini_analysis(file_id):
+    try:
+        text = await extract_text_from_file(file_id)
+        if not text:
+            return None
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
+
+        prompt = f"""کتاب زیر را به زبان فارسی تحلیل کن.
+
+۱. شخصیت‌های اصلی
+۲. تم‌های اصلی
+۳. سبک نوشتاری
+۴. نکات کلیدی
+۵. پیام اصلی
+
+متن کتاب:
+{text[:5000]}"""
+
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        headers = {"Content-Type": "application/json"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers, timeout=60) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return None
+    except Exception as e:
+        print(f"❌ خطا: {e}")
+        return None
+
+async def get_gemini_response(prompt):
+    try:
+        if not GEMINI_API_KEY:
+            return "❌ کلید جیمینای تنظیم نشده!"
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
+
+        full_prompt = f"به فارسی پاسخ بده. پاسخ‌هات کوتاه و مفید باشه:\n\n{prompt}"
+
+        payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
+        headers = {"Content-Type": "application/json"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers, timeout=60) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        return candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return None
+    except Exception as e:
+        print(f"❌ خطا: {e}")
+        return None
+
+async def extract_text_from_file(file_id):
+    try:
+        return "این متن نمونه از کتاب است. برای دریافت متن واقعی، باید فایل PDF دانلود و پردازش شود."
+    except Exception as e:
+        print(f"خطا: {e}")
+        return None
+
+# ========================================
+# 📤 ارسال همگانی
+# ========================================
+
+@router.message(lambda m: m.text == "📤 ارسال همگانی" and m.from_user.id == ADMIN_ID)
+async def broadcast_start(message: types.Message):
+    user_states[message.from_user.id] = {"state": "waiting_broadcast"}
+    await message.answer(
+        "📤 **ارسال همگانی**\n\n"
+        "📝 پیام رو بفرست تا به همه کاربران ارسال بشه."
+    )
+
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_broadcast")
+async def broadcast_confirm(message: types.Message):
+    users = get_all_users()
+    if not users:
+        await message.answer("❌ هیچ کاربری وجود نداره!")
+        user_states[message.from_user.id] = {}
+        return
+
+    await message.answer(f"📤 ارسال به {len(users)} کاربر شروع شد...")
+    success = 0
+    for user_id, username, full_name in users:
+        try:
+            await message.bot.send_message(user_id, message.text)
+            success += 1
+            await asyncio.sleep(0.05)
+        except:
+            pass
+
+    await message.answer(f"✅ پیام به {success} کاربر ارسال شد!")
+    user_states[message.from_user.id] = {}
+
+# ========================================
+# 💾 بکاپ و بازیابی
+# ========================================
+
+@router.message(lambda m: m.text == "💾 بکاپ و بازیابی" and m.from_user.id == ADMIN_ID)
+async def backup_panel(message: types.Message):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💾 گرفتن بکاپ", callback_data="backup_db")],
+        [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
+    ])
+    await message.answer("💾 **مدیریت بکاپ**", reply_markup=keyboard)
 
 @router.callback_query(lambda c: c.data == "backup_db")
 async def backup_db_callback(call: types.CallbackQuery):
-
     result = backup_db()
-
     if result:
-
-        await call.message.edit_text(
-            "✅ **بکاپ با موفقیت گرفته شد!**"
-        )
-
+        await call.message.edit_text("✅ **بکاپ با موفقیت گرفته شد!**")
     else:
-
-        await call.message.edit_text(
-            "❌ خطا در گرفتن بکاپ!"
-        )
+        await call.message.edit_text("❌ خطا در گرفتن بکاپ!")
 
 # ========================================
 # 🔙 برگشت به پنل
@@ -1566,7 +1326,6 @@ async def backup_db_callback(call: types.CallbackQuery):
 
 @router.callback_query(lambda c: c.data == "back_to_panel")
 async def back_to_panel(call: types.CallbackQuery):
-
     await call.message.edit_text(
         "⚙️ **پنل مدیریت**\n\n"
         "📊 از دکمه‌های زیر استفاده کن:",
