@@ -10,7 +10,19 @@ router = Router()
 user_states = {}
 
 # ========================================
-# ===== کیبورد شیشه‌ای منوی کاربر (اضافه شد!) =====
+# ===== شخصیت‌های جیمینای =====
+# ========================================
+PERSONALITIES = {
+    "کیوت": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. 😊",
+    "مغرور": "با لحن مغرور و برتر پاسخ بده. 🦁",
+    "بامزه": "با لحن شوخ و طنز پاسخ بده. 😂",
+    "خجالتی": "با لحن خجالتی و کم‌رو پاسخ بده. 😳",
+    "باهوش": "با لحن علمی و دقیق پاسخ بده. 🧠",
+    "دارک": "با لحن تاریک و مرموز پاسخ بده. 🌙",
+}
+
+# ========================================
+# ===== کیبورد منوی کاربر =====
 # ========================================
 def user_menu_keyboard():
     return ReplyKeyboardMarkup(
@@ -185,6 +197,23 @@ async def user_ai_chat_response(message: types.Message):
         await message.answer("❌ خطا در ارتباط با جیمینای!")
 
 # ========================================
+# ===== کتاب‌ها (لیست برای کاربر) =====
+# ========================================
+@router.message(lambda m: m.text == "📚 کتاب‌ها")
+async def list_books_user(message: types.Message):
+    books = get_all_books()
+    if not books:
+        await message.answer("❌ هیچ کتابی موجود نیست!")
+        return
+    
+    text = "📚 **لیست کتاب‌ها:**\n\n"
+    for book in books[:10]:
+        text += f"• {book[1]} - {book[2] or 'نامشخص'}\n"
+    if len(books) > 10:
+        text += f"\n... و {len(books) - 10} کتاب دیگه"
+    await message.answer(text)
+
+# ========================================
 # ===== استارت =====
 # ========================================
 @router.message(CommandStart())
@@ -202,7 +231,7 @@ async def start(message: types.Message):
         await message.answer(
             f"👋 **سلام {message.from_user.first_name}!**\n\n"
             "به ربات مدیریت کتاب خوش اومدی!",
-            reply_markup=user_menu_keyboard()  # ← منو اینجا اضافه شد
+            reply_markup=user_menu_keyboard()
         )
         return
     
@@ -210,6 +239,7 @@ async def start(message: types.Message):
     if code.startswith("book_"):
         try:
             book_id = int(code.replace("book_", ""))
+            
             channels = get_channels()
             if channels:
                 with open("temp.json", "w") as f:
@@ -219,6 +249,7 @@ async def start(message: types.Message):
                     reply_markup=join_keyboard()
                 )
                 return
+            
             await send_book(message, book_id)
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
@@ -252,34 +283,8 @@ async def check_mem(call: types.CallbackQuery):
     await send_book(call.message, book_id)
 
 # ========================================
-# ===== کتاب‌ها (لیست) =====
-# ========================================
-@router.message(lambda m: m.text == "📚 کتاب‌ها")
-async def list_books_user(message: types.Message):
-    books = get_all_books()
-    if not books:
-        await message.answer("❌ هیچ کتابی موجود نیست!")
-        return
-    
-    text = "📚 **لیست کتاب‌ها:**\n\n"
-    for book in books[:10]:
-        text += f"• {book[1]} - {book[2] or 'نامشخص'}\n"
-    if len(books) > 10:
-        text += f"\n... و {len(books) - 10} کتاب دیگه"
-    await message.answer(text)
-
-# ========================================
 # ===== توابع جیمینای =====
 # ========================================
-PERSONALITIES = {
-    "کیوت": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. 😊",
-    "مغرور": "با لحن مغرور و برتر پاسخ بده. 🦁",
-    "بامزه": "با لحن شوخ و طنز پاسخ بده. 😂",
-    "خجالتی": "با لحن خجالتی و کم‌رو پاسخ بده. 😳",
-    "باهوش": "با لحن علمی و دقیق پاسخ بده. 🧠",
-    "دارک": "با لحن تاریک و مرموز پاسخ بده. 🌙",
-}
-
 async def get_gemini_response(prompt, personality_prompt=""):
     try:
         if not GEMINI_API_KEY:
