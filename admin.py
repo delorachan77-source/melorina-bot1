@@ -13,6 +13,18 @@ router = Router()
 user_states = {}
 
 # ========================================
+# ===== شخصیت‌های جیمینای =====
+# ========================================
+PERSONALITIES = {
+    "کیوت": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. 😊",
+    "مغرور": "با لحن مغرور و برتر پاسخ بده. 🦁",
+    "بامزه": "با لحن شوخ و طنز پاسخ بده. 😂",
+    "خجالتی": "با لحن خجالتی و کم‌رو پاسخ بده. 😳",
+    "باهوش": "با لحن علمی و دقیق پاسخ بده. 🧠",
+    "دارک": "با لحن تاریک و مرموز پاسخ بده. 🌙",
+}
+
+# ========================================
 # ===== کیبورد اصلی پنل ادمین =====
 # ========================================
 def get_admin_keyboard():
@@ -64,15 +76,6 @@ async def close_panel(message: types.Message):
 # 🎭 شخصیت جیمینای
 # ========================================
 # ========================================
-PERSONALITIES = {
-    "کیوت": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. 😊",
-    "مغرور": "با لحن مغرور و برتر پاسخ بده. 🦁",
-    "بامزه": "با لحن شوخ و طنز پاسخ بده. 😂",
-    "خجالتی": "با لحن خجالتی و کم‌رو پاسخ بده. 😳",
-    "باهوش": "با لحن علمی و دقیق پاسخ بده. 🧠",
-    "دارک": "با لحن تاریک و مرموز پاسخ بده. 🌙",
-}
-
 @router.message(lambda m: m.text == "🎭 شخصیت جیمینای" and m.from_user.id == ADMIN_ID)
 async def personality_panel(message: types.Message):
     current = get_setting("gemini_personality") or "کیوت"
@@ -97,7 +100,7 @@ async def set_personality(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 👀 پنل عضویت اجباری
+# 👀 پنل عضویت
 # ========================================
 # ========================================
 @router.message(lambda m: m.text == "👀 پنل عضویت" and m.from_user.id == ADMIN_ID)
@@ -138,6 +141,7 @@ async def manage_books(message: types.Message):
     ])
     await message.answer("📚 **مدیریت کتاب‌ها**", reply_markup=keyboard)
 
+# ===== افزودن کتاب =====
 @router.callback_query(lambda c: c.data == "add_book")
 async def add_book_start(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
@@ -209,6 +213,7 @@ async def get_file(message: types.Message):
     add_admin_activity(message.from_user.id, "افزودن کتاب", f"کتاب: {data.get('title')}")
     await message.answer(f"✅ **کتاب «{data.get('title')}» با موفقیت اضافه شد!**")
 
+# ===== لیست کتاب‌ها =====
 @router.callback_query(lambda c: c.data == "list_books")
 async def list_books(call: types.CallbackQuery):
     books = get_all_books()
@@ -222,6 +227,7 @@ async def list_books(call: types.CallbackQuery):
         text += f"\n... و {len(books) - 10} کتاب دیگه"
     await call.message.edit_text(text)
 
+# ===== حذف کتاب =====
 @router.callback_query(lambda c: c.data == "delete_book")
 async def delete_book_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_delete"}
@@ -242,6 +248,7 @@ async def delete_book_confirm(message: types.Message):
         await message.answer("❌ لطفاً یک عدد معتبر بفرست!")
     user_states[message.from_user.id] = {}
 
+# ===== جستجوی کتاب =====
 @router.callback_query(lambda c: c.data == "search_book")
 async def search_book_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_search"}
@@ -262,6 +269,7 @@ async def search_book_confirm(message: types.Message):
     await message.answer(text)
     user_states[message.from_user.id] = {}
 
+# ===== کتاب‌های یک ژانر =====
 @router.callback_query(lambda c: c.data == "genre_books")
 async def genre_books_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_genre_list"}
@@ -431,7 +439,7 @@ async def advanced_stats(message: types.Message):
 
 # ========================================
 # ========================================
-# 🤖 هوش مصنوعی
+# 🤖 هوش مصنوعی با جیمینای
 # ========================================
 # ========================================
 @router.message(lambda m: m.text == "🤖 هوش مصنوعی" and m.from_user.id == ADMIN_ID)
