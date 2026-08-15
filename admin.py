@@ -39,20 +39,6 @@ def get_admin_keyboard():
     )
 
 # ========================================
-# ========================================
-# ===== شخصیت‌های جیمینای =====
-# ========================================
-# ========================================
-PERSONALITIES = {
-    "کیوت": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. از کلمات محبت‌آمیز استفاده کن. بجای چرا بگو چرااااا! بجای چیشد بگو چیشدد! 😊",
-    "مغرور": "با لحن مغرور و برتر پاسخ بده. انگار که همه چیز رو میدونی. از کلمات قاطع استفاده کن. 🦁",
-    "بامزه": "با لحن شوخ و طنز پاسخ بده. از جوک و لطیفه استفاده کن. 😂",
-    "خجالتی": "با لحن خجالتی و کم‌رو پاسخ بده. انگار که خجالت میکشی. از کلمات نرم استفاده کن. 😳",
-    "باهوش": "با لحن علمی و دقیق پاسخ بده. از کلمات تخصصی استفاده کن. 🧠",
-    "دارک": "با لحن تاریک و مرموز پاسخ بده. انگار که رازهایی داری. 🌙",
-}
-
-# ========================================
 # ===== پنل اصلی =====
 # ========================================
 @router.message(Command("panel"))
@@ -78,6 +64,15 @@ async def close_panel(message: types.Message):
 # 🎭 شخصیت جیمینای
 # ========================================
 # ========================================
+PERSONALITIES = {
+    "کیوت": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. 😊",
+    "مغرور": "با لحن مغرور و برتر پاسخ بده. 🦁",
+    "بامزه": "با لحن شوخ و طنز پاسخ بده. 😂",
+    "خجالتی": "با لحن خجالتی و کم‌رو پاسخ بده. 😳",
+    "باهوش": "با لحن علمی و دقیق پاسخ بده. 🧠",
+    "دارک": "با لحن تاریک و مرموز پاسخ بده. 🌙",
+}
+
 @router.message(lambda m: m.text == "🎭 شخصیت جیمینای" and m.from_user.id == ADMIN_ID)
 async def personality_panel(message: types.Message):
     current = get_setting("gemini_personality") or "کیوت"
@@ -422,7 +417,6 @@ async def advanced_stats(message: types.Message):
     if popular:
         popular_text = f"🏆 **کتاب پرفروش:** {popular[0][1]} ({popular[0][8]} دانلود)"
     
-    # امتیاز ربات
     ratings = get_robot_ratings()
     
     await message.answer(
@@ -437,7 +431,7 @@ async def advanced_stats(message: types.Message):
 
 # ========================================
 # ========================================
-# 🤖 هوش مصنوعی با جیمینای
+# 🤖 هوش مصنوعی
 # ========================================
 # ========================================
 @router.message(lambda m: m.text == "🤖 هوش مصنوعی" and m.from_user.id == ADMIN_ID)
@@ -702,7 +696,7 @@ async def delete_password_file_confirm(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 📝 نظرات و پیشنهادات (برای ادمین)
+# 📝 نظرات و پیشنهادات
 # ========================================
 # ========================================
 @router.message(lambda m: m.text == "📝 نظرات و پیشنهادات" and m.from_user.id == ADMIN_ID)
@@ -720,7 +714,7 @@ async def view_feedback_panel(message: types.Message):
 
 # ========================================
 # ========================================
-# 📋 بروزرسانی‌ها (برای ادمین)
+# 📋 بروزرسانی‌ها
 # ========================================
 # ========================================
 @router.message(lambda m: m.text == "📋 بروزرسانی‌ها" and m.from_user.id == ADMIN_ID)
@@ -806,7 +800,7 @@ async def back_to_panel(call: types.CallbackQuery):
 # ========================================
 async def get_gemini_summary(file_id):
     try:
-        text = "این متن نمونه از کتاب است. برای خلاصه‌سازی واقعی باید فایل PDF پردازش شود."
+        text = "این متن نمونه از کتاب است."
         if not text:
             return None
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
@@ -823,7 +817,7 @@ async def get_gemini_summary(file_id):
 
 async def get_gemini_analysis(file_id):
     try:
-        text = "این متن نمونه از کتاب است. برای تحلیل واقعی باید فایل PDF پردازش شود."
+        text = "این متن نمونه از کتاب است."
         if not text:
             return None
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
