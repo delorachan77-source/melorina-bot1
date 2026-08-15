@@ -1,12 +1,27 @@
 from aiogram import Router, types
 from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import ADMIN_ID
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from config import ADMIN_ID, GEMINI_API_KEY
 from database import *
 import json
+import aiohttp
 
 router = Router()
 user_states = {}
+
+# ========================================
+# ===== کیبورد شیشه‌ای منوی کاربر (اضافه شد!) =====
+# ========================================
+def user_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📚 کتاب‌ها")],
+            [KeyboardButton(text="💬 چت با جیمینای")],
+            [KeyboardButton(text="💬 نظر و پیشنهاد")],
+            [KeyboardButton(text="⭐ امتیاز به ربات")],
+        ],
+        resize_keyboard=True
+    )
 
 # ========================================
 # ===== کیبورد عضویت =====
@@ -103,6 +118,73 @@ async def handle_password_file(message: types.Message):
             await message.answer_document(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
 
 # ========================================
+# ===== نظر و پیشنهاد =====
+# ========================================
+@router.message(lambda m: m.text == "💬 نظر و پیشنهاد")
+async def feedback_start(message: types.Message):
+    user_states[message.from_user.id] = {"state": "waiting_feedback"}
+    await message.answer("💬 **نظر یا پیشنهادت رو بفرست:**")
+
+@router.message(lambda m: m.text and user_states.get(m.from_user.id, {}).get("state") == "waiting_feedback")
+async def save_feedback(message: types.Message):
+    add_feedback(message.from_user.id, message.text)
+    user_states[message.from_user.id] = {}
+    await message.bot.send_message(
+        ADMIN_ID,
+        f"📝 **نظر جدید:**\n\n👤 {message.from_user.full_name}\n🆔 `{message.from_user.id}`\n\n📄 {message.text}"
+    )
+    await message.answer("✅ **نظرت ثبت شد! ممنون 🙏**")
+
+# ========================================
+# ===== امتیاز به ربات =====
+# ========================================
+@router.message(lambda m: m.text == "⭐ امتیاز به ربات")
+async def rating_start(message: types.Message):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"{i}⭐", callback_data=f"rate_robot_{i}") for i in range(1, 6)],
+        [InlineKeyboardButton(text=f"{i}⭐", callback_data=f"rate_robot_{i}") for i in range(6, 11)]
+    ])
+    await message.answer(
+        "⭐ **به ربات امتیاز بده!**\n\nاز ۱ تا ۱۰، به ربات چند میدی؟",
+        reply_markup=keyboard
+    )
+
+@router.callback_query(lambda c: c.data.startswith("rate_robot_"))
+async def save_rating(call: types.CallbackQuery):
+    rating = int(call.data.replace("rate_robot_", ""))
+    add_robot_rating(call.from_user.id, rating)
+    await call.message.edit_text(f"✅ **امتیاز شما ثبت شد!**\n\n⭐ {rating} از ۱۰")
+    await call.answer("✅ امتیاز ثبت شد!")
+
+# ========================================
+# ===== چت با جیمینای برای کاربر =====
+# ========================================
+@router.message(lambda m: m.text == "💬 چت با جیمینای")
+async def user_ai_chat_start(message: types.Message):
+    user_states[message.from_user.id] = {"state": "waiting_user_ai_chat"}
+    await message.answer("💬 **چت با جیمینای**\n\nهر چی دوست داری بپرس! 😊\nبرای بستن /cancel بفرست.")
+
+@router.message(lambda m: m.text and user_states.get(m.from_user.id, {}).get("state") == "waiting_user_ai_chat")
+async def user_ai_chat_response(message: types.Message):
+    if message.text == "/cancel":
+        user_states[message.from_user.id] = {}
+        await message.answer("✅ چت بسته شد!")
+        return
+    if not GEMINI_API_KEY:
+        await message.answer("❌ جیمینای در دسترس نیست!")
+        return
+    await message.answer("🤔 دارم فکر میکنم...")
+    
+    personality = get_setting("gemini_personality") or "کیوت"
+    personality_prompt = PERSONALITIES.get(personality, "")
+    
+    response = await get_gemini_response(message.text, personality_prompt)
+    if response:
+        await message.answer(response)
+    else:
+        await message.answer("❌ خطا در ارتباط با جیمینای!")
+
+# ========================================
 # ===== استارت =====
 # ========================================
 @router.message(CommandStart())
@@ -119,7 +201,8 @@ async def start(message: types.Message):
         await send_banner(message)
         await message.answer(
             f"👋 **سلام {message.from_user.first_name}!**\n\n"
-            "به ربات مدیریت کتاب خوش اومدی!"
+            "به ربات مدیریت کتاب خوش اومدی!",
+            reply_markup=user_menu_keyboard()  # ← منو اینجا اضافه شد
         )
         return
     
@@ -127,7 +210,6 @@ async def start(message: types.Message):
     if code.startswith("book_"):
         try:
             book_id = int(code.replace("book_", ""))
-            
             channels = get_channels()
             if channels:
                 with open("temp.json", "w") as f:
@@ -137,7 +219,6 @@ async def start(message: types.Message):
                     reply_markup=join_keyboard()
                 )
                 return
-            
             await send_book(message, book_id)
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
@@ -169,3 +250,53 @@ async def check_mem(call: types.CallbackQuery):
     
     await call.message.delete()
     await send_book(call.message, book_id)
+
+# ========================================
+# ===== کتاب‌ها (لیست) =====
+# ========================================
+@router.message(lambda m: m.text == "📚 کتاب‌ها")
+async def list_books_user(message: types.Message):
+    books = get_all_books()
+    if not books:
+        await message.answer("❌ هیچ کتابی موجود نیست!")
+        return
+    
+    text = "📚 **لیست کتاب‌ها:**\n\n"
+    for book in books[:10]:
+        text += f"• {book[1]} - {book[2] or 'نامشخص'}\n"
+    if len(books) > 10:
+        text += f"\n... و {len(books) - 10} کتاب دیگه"
+    await message.answer(text)
+
+# ========================================
+# ===== توابع جیمینای =====
+# ========================================
+PERSONALITIES = {
+    "کیوت": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. 😊",
+    "مغرور": "با لحن مغرور و برتر پاسخ بده. 🦁",
+    "بامزه": "با لحن شوخ و طنز پاسخ بده. 😂",
+    "خجالتی": "با لحن خجالتی و کم‌رو پاسخ بده. 😳",
+    "باهوش": "با لحن علمی و دقیق پاسخ بده. 🧠",
+    "دارک": "با لحن تاریک و مرموز پاسخ بده. 🌙",
+}
+
+async def get_gemini_response(prompt, personality_prompt=""):
+    try:
+        if not GEMINI_API_KEY:
+            return "❌ جیمینای در دسترس نیست!"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
+        full_prompt = f"""{personality_prompt}
+        
+        به فارسی پاسخ بده. پاسخ‌هات کوتاه و جذاب باشه.
+        
+        سوال: {prompt}
+        """
+        payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=60) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return None
+    except:
+        return None
