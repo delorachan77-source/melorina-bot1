@@ -68,6 +68,39 @@ c.execute("""
     )
 """)
 
+c.execute("""
+    CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        message TEXT,
+        date TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS robot_ratings (
+        user_id INTEGER PRIMARY KEY,
+        rating INTEGER,
+        date TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS updates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        content TEXT,
+        date TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+""")
+
 db.commit()
 print("✅ دیتابیس راه‌اندازی شد!")
 
@@ -263,6 +296,58 @@ def get_admin_activities(admin_id=None, limit=20):
     return c.fetchall()
 
 # ========================================
+# ===== توابع نظرات =====
+# ========================================
+def add_feedback(user_id, message):
+    now = datetime.now().isoformat()
+    c.execute("INSERT INTO feedback (user_id, message, date) VALUES (?,?,?)", (user_id, message, now))
+    db.commit()
+
+def get_all_feedback():
+    c.execute("SELECT id, user_id, message, date FROM feedback ORDER BY date DESC")
+    return c.fetchall()
+
+# ========================================
+# ===== توابع امتیاز ربات =====
+# ========================================
+def add_robot_rating(user_id, rating):
+    now = datetime.now().isoformat()
+    c.execute("INSERT OR REPLACE INTO robot_ratings VALUES (?,?,?)", (user_id, rating, now))
+    db.commit()
+
+def get_robot_ratings():
+    c.execute("SELECT rating FROM robot_ratings")
+    ratings = c.fetchall()
+    if ratings:
+        avg = sum(r[0] for r in ratings) / len(ratings)
+        return {"avg": round(avg, 1), "count": len(ratings)}
+    return {"avg": 0, "count": 0}
+
+# ========================================
+# ===== توابع بروزرسانی =====
+# ========================================
+def add_update(title, content):
+    now = datetime.now().isoformat()
+    c.execute("INSERT INTO updates (title, content, date) VALUES (?,?,?)", (title, content, now))
+    db.commit()
+
+def get_all_updates():
+    c.execute("SELECT id, title, content, date FROM updates ORDER BY date DESC")
+    return c.fetchall()
+
+# ========================================
+# ===== توابع تنظیمات =====
+# ========================================
+def set_setting(key, value):
+    c.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, value))
+    db.commit()
+
+def get_setting(key):
+    c.execute("SELECT value FROM settings WHERE key=?", (key,))
+    row = c.fetchone()
+    return row[0] if row else None
+
+# ========================================
 # ===== توابع کمکی =====
 # ========================================
 def backup_db():
@@ -286,6 +371,10 @@ def clear_all_data():
     c.execute("DELETE FROM users")
     c.execute("DELETE FROM password_files")
     c.execute("DELETE FROM admin_activities")
+    c.execute("DELETE FROM feedback")
+    c.execute("DELETE FROM robot_ratings")
+    c.execute("DELETE FROM updates")
+    c.execute("DELETE FROM settings")
     db.commit()
     return True
 
@@ -299,3 +388,4 @@ def get_db_stats():
     }
 
 print("✅ تمام توابع دیتابیس بارگذاری شدند!")
+print(f"📁 مسیر دیتابیس: {DB_PATH}")
