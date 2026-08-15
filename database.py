@@ -1,881 +1,301 @@
-# database.py
-
-import os
-import shutil
 import sqlite3
+import os
 from datetime import datetime
 
-
-# ========================================
-# ⚙️ تنظیمات دیتابیس
-# ========================================
-
 DB_PATH = os.getenv("DB_PATH", "bot.db")
-BACKUP_PATH = f"{DB_PATH}.backup"
-
-
-# ========================================
-# 🔌 اتصال به دیتابیس
-# ========================================
-
-db = sqlite3.connect(
-    DB_PATH,
-    check_same_thread=False
-)
-
-db.row_factory = sqlite3.Row
-
+db = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = db.cursor()
 
-
-# ========================================
-# 🛠 ساخت جدول‌ها
-# ========================================
-
-# ----------------------------------------
-# 📚 کتاب‌ها
-# ----------------------------------------
-
+# ===== جدول‌ها =====
 c.execute("""
-CREATE TABLE IF NOT EXISTS books (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    author TEXT,
-    description TEXT,
-    genre TEXT,
-    cover_file_id TEXT,
-    file_id TEXT NOT NULL,
-    file_name TEXT,
-    file_size INTEGER DEFAULT 0,
-    downloads INTEGER DEFAULT 0,
-    created_at TEXT
-)
+    CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        author TEXT,
+        description TEXT,
+        genre TEXT,
+        cover_file_id TEXT,
+        file_id TEXT NOT NULL,
+        file_name TEXT,
+        file_size INTEGER,
+        downloads INTEGER DEFAULT 0,
+        created_at TEXT
+    )
 """)
 
-
-# ----------------------------------------
-# 📢 کانال‌های اجباری
-# ----------------------------------------
-
 c.execute("""
-CREATE TABLE IF NOT EXISTS channels (
-    username TEXT PRIMARY KEY
-)
+    CREATE TABLE IF NOT EXISTS channels (
+        username TEXT PRIMARY KEY
+    )
 """)
 
-
-# ----------------------------------------
-# 🎨 بنر
-# ----------------------------------------
-
 c.execute("""
-CREATE TABLE IF NOT EXISTS banner (
-    type TEXT DEFAULT 'text',
-    file_id TEXT,
-    text TEXT
-)
+    CREATE TABLE IF NOT EXISTS banner (
+        type TEXT DEFAULT 'text',
+        file_id TEXT,
+        text TEXT
+    )
 """)
 
-
-# ----------------------------------------
-# 👥 کاربران
-# ----------------------------------------
-
 c.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    username TEXT,
-    full_name TEXT,
-    join_date TEXT
-)
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        full_name TEXT,
+        join_date TEXT
+    )
 """)
 
-
-# ----------------------------------------
-# 🔐 فایل‌های رمزدار
-# ----------------------------------------
-
 c.execute("""
-CREATE TABLE IF NOT EXISTS password_files (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    password TEXT NOT NULL UNIQUE,
-    file_id TEXT NOT NULL,
-    file_type TEXT DEFAULT 'document',
-    caption TEXT,
-    created_at TEXT
-)
+    CREATE TABLE IF NOT EXISTS password_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        password TEXT NOT NULL,
+        file_id TEXT NOT NULL,
+        file_type TEXT DEFAULT 'document',
+        caption TEXT,
+        created_at TEXT
+    )
 """)
 
-
-# ----------------------------------------
-# 👨‍💻 فعالیت ادمین‌ها
-# ----------------------------------------
-
 c.execute("""
-CREATE TABLE IF NOT EXISTS admin_activities (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    admin_id INTEGER,
-    action TEXT,
-    details TEXT,
-    created_at TEXT
-)
+    CREATE TABLE IF NOT EXISTS admin_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_id INTEGER,
+        action TEXT,
+        details TEXT,
+        created_at TEXT
+    )
 """)
-
 
 db.commit()
-
-
-# ========================================
-# 🧹 ابزار داخلی
-# ========================================
-
-def now():
-    return datetime.now().isoformat()
-
+print("✅ دیتابیس راه‌اندازی شد!")
 
 # ========================================
-# 📚 توابع کتاب‌ها
+# ===== توابع کتاب‌ها =====
 # ========================================
-
-def add_book(
-    title,
-    author="",
-    description="",
-    genre="",
-    cover_file_id="",
-    file_id="",
-    file_name="",
-    file_size=0
-):
-    """افزودن کتاب"""
-
+def add_book(title, author, description, genre, cover_file_id, file_id, file_name="", file_size=0):
+    now = datetime.now().isoformat()
     c.execute("""
-        INSERT INTO books (
-            title,
-            author,
-            description,
-            genre,
-            cover_file_id,
-            file_id,
-            file_name,
-            file_size,
-            created_at
-        )
+        INSERT INTO books (title, author, description, genre, cover_file_id, file_id, file_name, file_size, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        title,
-        author,
-        description,
-        genre,
-        cover_file_id,
-        file_id,
-        file_name,
-        file_size,
-        now()
-    ))
-
+    """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, now))
     db.commit()
-
     return c.lastrowid
 
-
 def get_all_books():
-    """دریافت تمام کتاب‌ها"""
-
     c.execute("""
-        SELECT
-            id,
-            title,
-            author,
-            description,
-            genre,
-            cover_file_id,
-            file_id,
-            file_name,
-            downloads
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
         ORDER BY created_at DESC
     """)
-
-    return [tuple(row) for row in c.fetchall()]
-
+    return c.fetchall()
 
 def get_book(book_id):
-    """دریافت یک کتاب"""
-
     c.execute("""
-        SELECT
-            id,
-            title,
-            author,
-            description,
-            genre,
-            cover_file_id,
-            file_id,
-            file_name,
-            downloads
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
-        WHERE id = ?
+        WHERE id=?
     """, (book_id,))
-
-    row = c.fetchone()
-
-    return tuple(row) if row else None
-
+    return c.fetchone()
 
 def delete_book(book_id):
-    """حذف کتاب"""
-
-    c.execute(
-        "DELETE FROM books WHERE id = ?",
-        (book_id,)
-    )
-
+    c.execute("DELETE FROM books WHERE id=?", (book_id,))
     db.commit()
-
-    return c.rowcount > 0
-
+    return True
 
 def increment_download(book_id):
-    """افزایش تعداد دانلود"""
-
-    c.execute("""
-        UPDATE books
-        SET downloads = downloads + 1
-        WHERE id = ?
-    """, (book_id,))
-
+    c.execute("UPDATE books SET downloads = downloads + 1 WHERE id=?", (book_id,))
     db.commit()
-
-    return c.rowcount > 0
-
+    return True
 
 def search_books(query):
-    """جستجو در کتاب‌ها"""
-
-    pattern = f"%{query}%"
-
     c.execute("""
-        SELECT
-            id,
-            title,
-            author,
-            description,
-            genre,
-            cover_file_id,
-            file_id,
-            file_name,
-            downloads
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
-        WHERE
-            title LIKE ?
-            OR author LIKE ?
-            OR description LIKE ?
-            OR genre LIKE ?
+        WHERE title LIKE ? OR author LIKE ? OR description LIKE ? OR genre LIKE ?
         ORDER BY created_at DESC
-    """, (
-        pattern,
-        pattern,
-        pattern,
-        pattern
-    ))
-
-    return [tuple(row) for row in c.fetchall()]
-
+    """, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
+    return c.fetchall()
 
 def get_books_by_genre(genre):
-    """دریافت کتاب‌های یک ژانر"""
-
     c.execute("""
-        SELECT
-            id,
-            title,
-            author,
-            description,
-            genre,
-            cover_file_id,
-            file_id,
-            file_name,
-            downloads
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
         WHERE genre = ?
         ORDER BY created_at DESC
     """, (genre,))
-
-    return [tuple(row) for row in c.fetchall()]
-
+    return c.fetchall()
 
 def get_book_count():
-    """تعداد کتاب‌ها"""
-
-    c.execute(
-        "SELECT COUNT(*) FROM books"
-    )
-
+    c.execute("SELECT COUNT(*) FROM books")
     return c.fetchone()[0]
-
 
 def get_total_downloads():
-    """کل دانلودها"""
-
-    c.execute(
-        "SELECT COALESCE(SUM(downloads), 0) FROM books"
-    )
-
-    return c.fetchone()[0]
-
+    c.execute("SELECT SUM(downloads) FROM books")
+    result = c.fetchone()[0]
+    return result if result else 0
 
 def get_popular_books(limit=5):
-    """کتاب‌های محبوب"""
-
     c.execute("""
-        SELECT
-            id,
-            title,
-            author,
-            description,
-            genre,
-            cover_file_id,
-            file_id,
-            file_name,
-            downloads
+        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
         FROM books
         ORDER BY downloads DESC
         LIMIT ?
     """, (limit,))
-
-    return [tuple(row) for row in c.fetchall()]
-
+    return c.fetchall()
 
 # ========================================
-# 📢 کانال‌ها
+# ===== توابع کانال‌ها =====
 # ========================================
-
 def add_channel(username):
-    """افزودن کانال"""
-
-    username = username.strip().replace("@", "")
-
-    if not username:
-        return False
-
-    c.execute("""
-        INSERT OR IGNORE INTO channels (username)
-        VALUES (?)
-    """, (username,))
-
+    c.execute("INSERT OR IGNORE INTO channels VALUES (?)", (username,))
     db.commit()
-
     return True
-
 
 def get_channels():
-    """لیست کانال‌ها"""
-
-    c.execute("""
-        SELECT username
-        FROM channels
-        ORDER BY username
-    """)
-
-    return [
-        row[0]
-        for row in c.fetchall()
-    ]
-
+    c.execute("SELECT username FROM channels")
+    return [row[0] for row in c.fetchall()]
 
 def delete_channel(username):
-    """حذف کانال"""
-
-    username = username.strip().replace("@", "")
-
-    c.execute("""
-        DELETE FROM channels
-        WHERE username = ?
-    """, (username,))
-
+    c.execute("DELETE FROM channels WHERE username=?", (username,))
     db.commit()
-
-    return c.rowcount > 0
-
+    return True
 
 def get_channels_count():
-    """تعداد کانال‌ها"""
-
-    c.execute(
-        "SELECT COUNT(*) FROM channels"
-    )
-
+    c.execute("SELECT COUNT(*) FROM channels")
     return c.fetchone()[0]
 
-
 # ========================================
-# 🎨 بنر
+# ===== توابع بنر =====
 # ========================================
-
-def set_banner(
-    banner_type,
-    file_id=None,
-    text=""
-):
-    """تنظیم بنر"""
-
-    c.execute(
-        "DELETE FROM banner"
-    )
-
-    c.execute("""
-        INSERT INTO banner (
-            type,
-            file_id,
-            text
-        )
-        VALUES (?, ?, ?)
-    """, (
-        banner_type,
-        file_id,
-        text
-    ))
-
+def set_banner(banner_type, file_id=None, text=""):
+    c.execute("DELETE FROM banner")
+    c.execute("INSERT INTO banner VALUES (?,?,?)", (banner_type, file_id, text))
     db.commit()
-
     return True
-
 
 def get_banner():
-    """دریافت بنر"""
-
-    c.execute("""
-        SELECT type, file_id, text
-        FROM banner
-        LIMIT 1
-    """)
-
+    c.execute("SELECT type, file_id, text FROM banner")
     row = c.fetchone()
-
     if row:
-        return {
-            "type": row[0],
-            "file_id": row[1],
-            "text": row[2] or ""
-        }
-
-    return {
-        "type": "text",
-        "file_id": None,
-        "text": "📚 به ربات کتاب خوش آمدید!"
-    }
-
+        return {"type": row[0], "file_id": row[1], "text": row[2] or ""}
+    return {"type": "text", "file_id": None, "text": "📢 به ربات خوش اومدی!"}
 
 def delete_banner():
-    """حذف بنر"""
-
-    c.execute(
-        "DELETE FROM banner"
-    )
-
+    c.execute("DELETE FROM banner")
     db.commit()
-
     return True
 
-
 # ========================================
-# 👥 کاربران
+# ===== توابع کاربران =====
 # ========================================
-
-def add_user(
-    user_id,
-    username="",
-    full_name=""
-):
-    """ثبت یا بروزرسانی کاربر"""
-
-    current = now()
-
+def add_user(user_id, username="", full_name=""):
+    now = datetime.now().isoformat()
     c.execute("""
-        INSERT INTO users (
-            user_id,
-            username,
-            full_name,
-            join_date
-        )
+        INSERT OR IGNORE INTO users (user_id, username, full_name, join_date)
         VALUES (?, ?, ?, ?)
-
-        ON CONFLICT(user_id)
-        DO UPDATE SET
-            username = excluded.username,
-            full_name = excluded.full_name
-    """, (
-        user_id,
-        username,
-        full_name,
-        current
-    ))
-
+    """, (user_id, username, full_name, now))
     db.commit()
-
     return True
-
 
 def get_all_users():
-    """تمام کاربران"""
-
-    c.execute("""
-        SELECT
-            user_id,
-            username,
-            full_name,
-            join_date
-        FROM users
-        ORDER BY join_date DESC
-    """)
-
-    return [
-        tuple(row)
-        for row in c.fetchall()
-    ]
-
+    c.execute("SELECT user_id, username, full_name, join_date FROM users")
+    return c.fetchall()
 
 def get_user_count():
-    """تعداد کاربران"""
-
-    c.execute(
-        "SELECT COUNT(*) FROM users"
-    )
-
+    c.execute("SELECT COUNT(*) FROM users")
     return c.fetchone()[0]
-
 
 def get_user(user_id):
-    """دریافت کاربر"""
+    c.execute("SELECT user_id, username, full_name, join_date FROM users WHERE user_id=?", (user_id,))
+    return c.fetchone()
 
+# ========================================
+# ===== توابع رمز فایل =====
+# ========================================
+def add_password_file(name, password, file_id, file_type="document", caption=""):
+    now = datetime.now().isoformat()
     c.execute("""
-        SELECT
-            user_id,
-            username,
-            full_name,
-            join_date
-        FROM users
-        WHERE user_id = ?
-    """, (user_id,))
-
-    row = c.fetchone()
-
-    return tuple(row) if row else None
-
-
-# ========================================
-# 🔐 فایل‌های رمزدار
-# ========================================
-
-def add_password_file(
-    name,
-    password,
-    file_id,
-    file_type="document",
-    caption=""
-):
-    """افزودن فایل رمزدار"""
-
-    try:
-
-        c.execute("""
-            INSERT INTO password_files (
-                name,
-                password,
-                file_id,
-                file_type,
-                caption,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            name,
-            password,
-            file_id,
-            file_type,
-            caption,
-            now()
-        ))
-
-        db.commit()
-
-        return c.lastrowid
-
-    except sqlite3.IntegrityError:
-        return None
-
+        INSERT INTO password_files (name, password, file_id, file_type, caption, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (name, password, file_id, file_type, caption, now))
+    db.commit()
+    return c.lastrowid
 
 def get_password_file_by_code(code):
-    """دریافت فایل با رمز"""
-
-    c.execute("""
-        SELECT
-            id,
-            name,
-            file_id,
-            file_type,
-            caption
-        FROM password_files
-        WHERE password = ?
-    """, (code,))
-
-    row = c.fetchone()
-
-    return tuple(row) if row else None
-
+    c.execute("SELECT id, name, file_id, file_type, caption FROM password_files WHERE password=?", (code,))
+    return c.fetchone()
 
 def get_all_password_files():
-    """تمام فایل‌های رمزدار"""
-
-    c.execute("""
-        SELECT
-            id,
-            name,
-            password,
-            file_type
-        FROM password_files
-        ORDER BY created_at DESC
-    """)
-
-    return [
-        tuple(row)
-        for row in c.fetchall()
-    ]
-
+    c.execute("SELECT id, name, password, file_type FROM password_files ORDER BY created_at DESC")
+    return c.fetchall()
 
 def delete_password_file(file_id):
-    """حذف فایل رمزدار"""
-
-    c.execute("""
-        DELETE FROM password_files
-        WHERE id = ?
-    """, (file_id,))
-
+    c.execute("DELETE FROM password_files WHERE id=?", (file_id,))
     db.commit()
 
-    return c.rowcount > 0
-
-
-def get_password_file_count():
-    """تعداد فایل‌های رمزدار"""
-
-    c.execute(
-        "SELECT COUNT(*) FROM password_files"
-    )
-
-    return c.fetchone()[0]
-
-
 # ========================================
-# 👨‍💻 فعالیت ادمین
+# ===== توابع فعالیت ادمین‌ها =====
 # ========================================
-
-def add_admin_activity(
-    admin_id,
-    action,
-    details=""
-):
-    """ثبت فعالیت ادمین"""
-
+def add_admin_activity(admin_id, action, details=""):
+    now = datetime.now().isoformat()
     c.execute("""
-        INSERT INTO admin_activities (
-            admin_id,
-            action,
-            details,
-            created_at
-        )
+        INSERT INTO admin_activities (admin_id, action, details, created_at)
         VALUES (?, ?, ?, ?)
-    """, (
-        admin_id,
-        action,
-        details,
-        now()
-    ))
-
+    """, (admin_id, action, details, now))
     db.commit()
 
-    return True
-
-
-def get_admin_activities(
-    admin_id=None,
-    limit=20
-):
-    """دریافت فعالیت‌های ادمین"""
-
+def get_admin_activities(admin_id=None, limit=20):
     if admin_id:
-
         c.execute("""
-            SELECT
-                id,
-                action,
-                details,
-                created_at
-            FROM admin_activities
+            SELECT id, action, details, created_at FROM admin_activities
             WHERE admin_id = ?
             ORDER BY created_at DESC
             LIMIT ?
-        """, (
-            admin_id,
-            limit
-        ))
-
+        """, (admin_id, limit))
     else:
-
         c.execute("""
-            SELECT
-                id,
-                admin_id,
-                action,
-                details,
-                created_at
-            FROM admin_activities
+            SELECT id, admin_id, action, details, created_at FROM admin_activities
             ORDER BY created_at DESC
             LIMIT ?
         """, (limit,))
-
-    return [
-        tuple(row)
-        for row in c.fetchall()
-    ]
-
+    return c.fetchall()
 
 # ========================================
-# 💾 بکاپ
+# ===== توابع کمکی =====
 # ========================================
-
 def backup_db():
-    """گرفتن بکاپ از دیتابیس"""
-
-    try:
-
-        db.commit()
-
-        if not os.path.exists(DB_PATH):
-            return False
-
-        shutil.copy2(
-            DB_PATH,
-            BACKUP_PATH
-        )
-
+    import shutil
+    if os.path.exists(DB_PATH):
+        shutil.copy(DB_PATH, f"{DB_PATH}.backup")
         return True
-
-    except Exception as e:
-
-        print(
-            f"❌ Backup error: {e}"
-        )
-
-        return False
-
-
-# ========================================
-# ♻️ Restore
-# ========================================
+    return False
 
 def restore_db():
-    """
-    بازیابی بکاپ.
-
-    بعد از Restore بهتر است ربات Restart شود،
-    چون فایل دیتابیس جایگزین می‌شود.
-    """
-
-    try:
-
-        if not os.path.exists(BACKUP_PATH):
-            return False
-
-        db.commit()
-
-        # بستن اتصال فعلی
-        db.close()
-
-        shutil.copy2(
-            BACKUP_PATH,
-            DB_PATH
-        )
-
+    import shutil
+    if os.path.exists(f"{DB_PATH}.backup"):
+        shutil.copy(f"{DB_PATH}.backup", DB_PATH)
         return True
-
-    except Exception as e:
-
-        print(
-            f"❌ Restore error: {e}"
-        )
-
-        return False
-
-
-# ========================================
-# 🧹 پاک کردن تمام اطلاعات
-# ========================================
+    return False
 
 def clear_all_data():
-    """پاک کردن تمام داده‌ها"""
-
-    tables = [
-        "books",
-        "channels",
-        "banner",
-        "users",
-        "password_files",
-        "admin_activities"
-    ]
-
-    for table in tables:
-        c.execute(
-            f"DELETE FROM {table}"
-        )
-
+    c.execute("DELETE FROM books")
+    c.execute("DELETE FROM channels")
+    c.execute("DELETE FROM banner")
+    c.execute("DELETE FROM users")
+    c.execute("DELETE FROM password_files")
+    c.execute("DELETE FROM admin_activities")
     db.commit()
-
     return True
 
-
-# ========================================
-# 📊 آمار دیتابیس
-# ========================================
-
 def get_db_stats():
-    """آمار کامل دیتابیس"""
-
     return {
         "books": get_book_count(),
         "channels": get_channels_count(),
         "users": get_user_count(),
         "total_downloads": get_total_downloads(),
-        "password_files": get_password_file_count()
+        "password_files": len(get_all_password_files())
     }
 
-
-# ========================================
-# 🔄 بستن دیتابیس
-# ========================================
-
-def close_db():
-    """بستن اتصال دیتابیس"""
-
-    try:
-        db.commit()
-        db.close()
-        return True
-
-    except Exception:
-        return False
-
-
-# ========================================
-# 🚀 وضعیت دیتابیس
-# ========================================
-
-print(
-    "✅ Database loaded successfully!"
-)
-
-print(
-    f"📁 Database: {DB_PATH}"
-)
+print("✅ تمام توابع دیتابیس بارگذاری شدند!")
