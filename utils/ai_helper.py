@@ -6,7 +6,7 @@ from config import GEMINI_API_KEY
 
 # ========================================
 # ========================================
-# ===== ارسال به جیمینای (با مدل درست) =====
+# ===== ارسال به جیمینای =====
 # ========================================
 # ========================================
 
@@ -16,8 +16,8 @@ async def call_gemini(prompt):
         return "❌ کلید جیمینای تنظیم نشده! لطفاً GEMINI_API_KEY رو توی .env تنظیم کن."
     
     try:
-        # ===== استفاده از مدل gemini-1.5-pro (پایدار و فعال) =====
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
+        # ===== استفاده از مدل gemini-pro (پایدارترین) =====
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
         
         payload = {
             "contents": [{
@@ -43,7 +43,7 @@ async def call_gemini(prompt):
                     if response.status == 403:
                         return "❌ کلید جیمینای نامعتبر است! لطفاً کلید جدید از https://aistudio.google.com/ بگیر."
                     elif response.status == 404:
-                        return "❌ مدل جیمینای پیدا نشد! در حال استفاده از مدل جایگزین..."
+                        return "❌ مدل جیمینای پیدا نشد! لطفاً کلید خود را بررسی کن."
                     elif response.status == 429:
                         return "❌ تعداد درخواست‌ها زیاد شده! چند دقیقه دیگه امتحان کن."
                     else:
@@ -158,8 +158,7 @@ async def test_gemini_connection():
         return "❌ کلید جیمینای تنظیم نشده!"
     
     try:
-        # ===== تست با مدل درست =====
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "contents": [{
                 "parts": [{"text": "سلام"}]
