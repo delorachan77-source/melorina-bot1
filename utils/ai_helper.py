@@ -3,17 +3,22 @@ import json
 import fitz  # PyMuPDF
 from PIL import Image
 import io
+import os
 from config import GEMINI_API_KEY
 
 # ========================================
-# ===== ارسال به جیمینای =====
 # ========================================
+# ===== ارسال به جیمینای (نسخه اصلاح شده) =====
+# ========================================
+# ========================================
+
 async def call_gemini(prompt):
-    """ارسال درخواست به جیمینای"""
+    """ارسال درخواست به جیمینای و دریافت پاسخ"""
     if not GEMINI_API_KEY:
-        return "❌ کلید جیمینای تنظیم نشده!"
+        return "❌ کلید جیمینای تنظیم نشده! لطفاً GEMINI_API_KEY رو توی .env تنظیم کن."
     
     try:
+        # ===== استفاده از مدل gemini-2.0-flash (سریع و رایگان) =====
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
         
         payload = {
@@ -22,66 +27,166 @@ async def call_gemini(prompt):
             }]
         }
         
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=60) as response:
+            async with session.post(url, json=payload, headers=headers, timeout=60) as response:
                 if response.status == 200:
                     data = await response.json()
-                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    result = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    if result:
+                        return result
+                    else:
+                        return "❌ جیمینای پاسخی برنگرداند!"
                 else:
-                    error = await response.text()
-                    print(f"❌ خطا: {response.status} - {error}")
-                    return None
+                    error_text = await response.text()
+                    print(f"❌ خطای جیمینای: {response.status} - {error_text}")
+                    
+                    # ===== خطاهای رایج =====
+                    if response.status == 403:
+                        return "❌ کلید جیمینای نامعتبر است! لطفاً کلید جدید از https://aistudio.google.com/ بگیر."
+                    elif response.status == 429:
+                        return "❌ تعداد درخواست‌ها زیاد شده! چند دقیقه دیگه امتحان کن."
+                    elif response.status == 400:
+                        return "❌ درخواست نامعتبر! لطفاً دوباره تلاش کن."
+                    else:
+                        return f"❌ خطای جیمینای: {response.status}"
+    except asyncio.TimeoutError:
+        return "❌ زمان درخواست به جیمینای تمام شد! دوباره تلاش کن."
+    except aiohttp.ClientError as e:
+        return f"❌ خطای اتصال به جیمینای: {str(e)[:100]}"
+    except Exception as e:
+        print(f"❌ خطا: {e}")
+        return f"❌ خطای داخلی: {str(e)[:100]}"
+
+# ========================================
+# ========================================
+# ===== مترجم =====
+# ========================================
+# ========================================
+
+async def translate_text(text, target_lang="fa"):
+    """ترجمه متن با جیمینای"""
+    if not text or len(text.strip()) < 2:
+        return "❌ متن کافی برای ترجمه وجود ندارد!"
+    
+    lang_name = "فارسی" if target_lang == "fa" else "انگلیسی"
+    prompt = f"متن زیر را به {lang_name} ترجمه کن. ترجمه روان و طبیعی باشد:\n\n{text}"
+    return await call_gemini(prompt)
+
+# ========================================
+# ========================================
+# ===== خلاصه‌سازی =====
+# ========================================
+# ========================================
+
+async def summarize_text(text):
+    """خلاصه‌سازی متن با جیمینای"""
+    if not text or len(text.strip()) < 50:
+        return "❌ متن کافی برای خلاصه‌سازی وجود ندارد! حداقل ۵۰ کاراکتر نیاز است."
+    
+    # محدود کردن متن به 5000 کاراکتر
+    if len(text) > 5000:
+        text = text[:5000] + "..."
+    
+    prompt = f"خلاصه زیر رو به فارسی بنویس (حداکثر ۱۰ خط، نکات کلیدی رو پوشش بده):\n\n{text}"
+    return await call_gemini(prompt)
+
+# ========================================
+# ========================================
+# ===== تحلیل کتاب =====
+# ========================================
+# ========================================
+
+async def analyze_book(text):
+    """تحلیل کتاب با جیمینای"""
+    if not text or len(text.strip()) < 100:
+        return "❌ متن کافی برای تحلیل وجود ندارد! حداقل ۱۰۰ کاراکتر نیاز است."
+    
+    if len(text) > 5000:
+        text = text[:5000] + "..."
+    
+    prompt = f"""
+    کتاب زیر را به زبان فارسی تحلیل کن:
+    
+    ۱. شخصیت‌های اصلی (نام و نقش)
+    ۲. تم‌های اصلی (موضوعات کلیدی)
+    ۳. سبک نوشتاری (روایت، زبان)
+    ۴. نکات کلیدی (پیام‌های مهم)
+    ۵. جمع‌بندی نهایی
+    
+    متن کتاب:
+    {text}
+    """
+    return await call_gemini(prompt)
+
+# ========================================
+# ========================================
+# ===== استخراج متن از فایل =====
+# ========================================
+# ========================================
+
+async def extract_text_from_file(file_path):
+    """استخراج متن از فایل PDF"""
+    try:
+        if not file_path:
+            return None
+        
+        if file_path.endswith(".pdf"):
+            doc = fitz.open(file_path)
+            text = ""
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text += page.get_text()
+            doc.close()
+            
+            if text.strip():
+                return text
+            else:
+                return "⚠️ فایل PDF متنی ندارد (ممکن است اسکن شده باشد)."
+        else:
+            return None
+    except Exception as e:
+        print(f"❌ خطا در استخراج متن: {e}")
+        return None
+
+# ========================================
+# ========================================
+# ===== تشخیص تصویر (برای آینده) =====
+# ========================================
+# ========================================
+
+async def extract_text_from_image(file_path):
+    """استخراج متن از عکس (برای آینده)"""
+    try:
+        # اینجا می‌تونی از Tesseract یا Gemini Vision استفاده کنی
+        return "⚠️ قابلیت تشخیص متن از عکس در حال توسعه است..."
     except Exception as e:
         print(f"❌ خطا: {e}")
         return None
 
 # ========================================
-# ===== مترجم =====
 # ========================================
-async def translate_text(text, target_lang="fa"):
-    """ترجمه متن با جیمینای"""
-    prompt = f"متن زیر را به {target_lang} ترجمه کن:\n\n{text}"
-    return await call_gemini(prompt)
+# ===== تست اتصال جیمینای =====
+# ========================================
+# ========================================
 
-# ========================================
-# ===== خلاصه‌سازی =====
-# ========================================
-async def summarize_text(text):
-    """خلاصه‌سازی متن با جیمینای"""
-    prompt = f"خلاصه زیر رو به فارسی بنویس (حداکثر ۱۰ خط):\n\n{text[:5000]}"
-    return await call_gemini(prompt)
-
-# ========================================
-# ===== تحلیل کتاب =====
-# ========================================
-async def analyze_book(text):
-    """تحلیل کتاب با جیمینای"""
-    prompt = f"""
-    کتاب زیر را تحلیل کن:
-    ۱. شخصیت‌های اصلی
-    ۲. تم‌های اصلی
-    ۳. سبک نوشتاری
-    ۴. نکات کلیدی
+async def test_gemini_connection():
+    """تست اتصال به جیمینای"""
+    if not GEMINI_API_KEY:
+        return "❌ کلید جیمینای تنظیم نشده!"
     
-    متن:
-    {text[:5000]}
-    """
-    return await call_gemini(prompt)
-
-# ========================================
-# ===== استخراج متن از فایل =====
-# ========================================
-async def extract_text_from_file(file_path):
-    """استخراج متن از PDF"""
     try:
-        if file_path.endswith(".pdf"):
-            doc = fitz.open(file_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
-            return text
-        return None
-    except Exception as e:
-        print(f"❌ خطا در استخراج متن: {e}")
-        return None
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    return "✅ اتصال به جیمینای برقرار است!"
+                else:
+                    return f"❌ خطا در اتصال: {response.status}"
+    except:
+        return "❌ اتصال به جیمینای برقرار نشد!"
+
+print("✅ توابع جیمینای بارگذاری شدند!")
