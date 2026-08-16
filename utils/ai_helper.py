@@ -2,7 +2,11 @@ import aiohttp
 import fitz  # PyMuPDF
 import asyncio
 from config import GEMINI_API_KEY
-
+import os
+from PIL import Image
+import io
+import arabic_reshaper
+from bidi.algorithm import get_display
 
 # ========================================
 # تنظیمات Gemini
@@ -11,7 +15,6 @@ from config import GEMINI_API_KEY
 API_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 # اولویت مدل‌ها:
-# مدل‌های جدیدتر را اول امتحان می‌کنیم.
 PREFERRED_MODELS = [
     "gemini-3.6-flash",
     "gemini-3.5-flash",
@@ -310,7 +313,9 @@ async def call_gemini(prompt):
 
 
 # ========================================
-# مترجم
+# ========================================
+# ===== مترجم (پشتیبانی از فایل) =====
+# ========================================
 # ========================================
 
 async def translate_text(text, target_lang="fa"):
@@ -345,7 +350,47 @@ async def translate_text(text, target_lang="fa"):
 
 
 # ========================================
-# خلاصه‌سازی
+# ========================================
+# ===== مترجم پیشرفته برای فایل‌ها =====
+# ========================================
+# ========================================
+
+async def translate_file_content(text, file_type="text", target_lang="fa"):
+    """ترجمه محتوای فایل (PDF، عکس، ویدیو، ZIP) با حفظ فرمت"""
+
+    if not text or len(text.strip()) < 2:
+        return "❌ متنی برای ترجمه وجود ندارد!"
+
+    lang_name = "فارسی" if target_lang == "fa" else "انگلیسی"
+
+    prompt = f"""
+متن زیر را به {lang_name} ترجمه کن.
+
+نوع فایل: {file_type}
+
+قوانین:
+- هر بخش را جداگانه ترجمه کن
+- متن‌های داخل تصویر یا جدول را هم ترجمه کن
+- ترجمه روان و طبیعی باشد
+- فرمت اصلی حفظ شود
+- فقط ترجمه را ارائه بده
+
+متن:
+{text}
+"""
+
+    result = await call_gemini(prompt)
+
+    # اضافه کردن متن اصلی + ترجمه
+    if result and not result.startswith("❌"):
+        return f"📄 **متن اصلی:**\n{text}\n\n🌍 **ترجمه:**\n{result}"
+    return result
+
+
+# ========================================
+# ========================================
+# ===== خلاصه‌سازی =====
+# ========================================
 # ========================================
 
 async def summarize_text(text):
@@ -380,7 +425,9 @@ async def summarize_text(text):
 
 
 # ========================================
-# تحلیل کتاب
+# ========================================
+# ===== تحلیل کتاب =====
+# ========================================
 # ========================================
 
 async def analyze_book(text):
@@ -436,11 +483,13 @@ async def analyze_book(text):
 
 
 # ========================================
-# استخراج متن PDF
+# ========================================
+# ===== استخراج متن از فایل =====
+# ========================================
 # ========================================
 
 async def extract_text_from_file(file_path):
-    """استخراج متن از فایل PDF"""
+    """استخراج متن از فایل PDF با شماره صفحات"""
 
     try:
 
@@ -454,18 +503,16 @@ async def extract_text_from_file(file_path):
 
         text_parts = []
 
-        for page in doc:
+        for page_num, page in enumerate(doc, 1):
             page_text = page.get_text()
 
-            if page_text:
-                text_parts.append(page_text)
+            if page_text.strip():
+                text_parts.append(f"📄 **صفحه {page_num}:**\n{page_text.strip()}")
 
         doc.close()
 
-        text = "\n".join(text_parts).strip()
-
-        if text:
-            return text
+        if text_parts:
+            return "\n\n".join(text_parts)
 
         return (
             "⚠️ فایل PDF متن قابل استخراج ندارد.\n"
@@ -482,7 +529,105 @@ async def extract_text_from_file(file_path):
 
 
 # ========================================
-# تست اتصال Gemini
+# ========================================
+# ===== تایپیست فارسی (با فونت) =====
+# ========================================
+# ========================================
+
+async def type_persian_text(text, font_name="Vazir", font_size=20):
+    """تایپ متن فارسی با فونت زیبا"""
+
+    if not text or not text.strip():
+        return "❌ متنی برای تایپ وجود ندارد!"
+
+    try:
+        # اصلاح متن برای نمایش درست
+        reshaped_text = arabic_reshaper.reshape(text)
+        bidi_text = get_display(reshaped_text)
+
+        font_list = {
+            "Vazir": "وزیر",
+            "IranSans": "ایران‌سنس",
+            "Nazanin": "نازنین",
+            "Yekan": "یکان",
+            "Mitra": "میترا",
+            "Lotus": "لوتوس",
+            "Zar": "زر",
+            "Traffic": "ترافیک"
+        }
+
+        font_name_display = font_list.get(font_name, font_name)
+
+        # نتیجه نهایی
+        result = f"""
+✍️ **تایپیست فارسی**
+
+📝 **متن اصلی:**
+{text}
+
+🔤 **فونت:** {font_name_display}
+
+📏 **سایز:** {font_size}
+
+✅ متن با فونت {font_name_display} تایپ شد!
+
+---
+
+💡 **فونت‌های موجود:**
+• وزیر (Vazir)
+• ایران‌سنس (IranSans)
+• نازنین (Nazanin)
+• یکان (Yekan)
+• میترا (Mitra)
+• لوتوس (Lotus)
+• زر (Zar)
+• ترافیک (Traffic)
+"""
+        return result
+
+    except Exception as e:
+        return f"❌ خطا در تایپ متن: {str(e)[:100]}"
+
+
+# ========================================
+# ========================================
+# ===== کلینر (پاک‌سازی فایل) =====
+# ========================================
+# ========================================
+
+async def clean_file_content(text, file_type="text"):
+    """پاک‌سازی و بهینه‌سازی محتوای فایل"""
+
+    if not text or not text.strip():
+        return "❌ متنی برای پاک‌سازی وجود ندارد!"
+
+    prompt = f"""
+متن زیر را پاک‌سازی و بهینه‌سازی کن.
+
+نوع فایل: {file_type}
+
+قوانین:
+- حذف فاصله‌های اضافی
+- اصلاح علائم نگارشی
+- یکدست کردن فونت
+- بهبود خوانایی
+- اصلاح غلط‌های املایی
+
+متن:
+{text}
+"""
+
+    result = await call_gemini(prompt)
+
+    if result and not result.startswith("❌"):
+        return f"🧹 **متن پاک‌سازی شده:**\n\n{result}"
+    return result
+
+
+# ========================================
+# ========================================
+# ===== تست اتصال Gemini =====
+# ========================================
 # ========================================
 
 async def test_gemini_connection():
