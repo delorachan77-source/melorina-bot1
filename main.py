@@ -1,17 +1,20 @@
 import asyncio
-import logging
-from aiogram import Bot, Dispatcher
-from config import BOT_TOKEN
-from handlers import router as user_router
-from admin import router as admin_router
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+import os
 
-logging.basicConfig(level=logging.INFO)
+TOKEN = os.getenv("BOT_TOKEN")
 
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-dp.include_router(user_router)
-dp.include_router(admin_router)
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    await message.answer("✅ ربات کار میکنه!")
+
+@dp.message(Command("panel"))
+async def panel(message: types.Message):
+    await message.answer("⚙️ پنل ادمین (تست)")
 
 async def main():
     print("🤖 ربات روشن شد!")
