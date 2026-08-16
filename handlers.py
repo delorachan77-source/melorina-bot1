@@ -1,29 +1,93 @@
 from aiogram import Router, types
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from config import ADMIN_ID
+from config import ADMIN_ID, GEMINI_API_KEY
 from database import *
 import json
+import aiohttp
 
 router = Router()
-user_states = {}  # ← اینجا تعریف شد!
+user_states = {}
 
 # ========================================
-# ===== کیبورد منوی کاربر (ساده) =====
 # ========================================
+# ===== شخصیت‌های جیمینای =====
+# ========================================
+# ========================================
+
+PERSONALITIES = {
+    "کیوت": {
+        "emoji": "🌸",
+        "prompt": "با لحن شیرین، صمیمی و دلنشین پاسخ بده. از کلمات محبت‌آمیز استفاده کن. بجای چرا بگو چراااا! بجای چیشد بگو چیشدد! 😊",
+        "description": "شیرین و صمیمی"
+    },
+    "مغرور": {
+        "emoji": "🦁",
+        "prompt": "با لحن مغرور و برتر پاسخ بده. انگار که همه چیز رو میدونی. از کلمات قاطع استفاده کن.",
+        "description": "با برتری و قاطعیت"
+    },
+    "بامزه": {
+        "emoji": "😂",
+        "prompt": "با لحن شوخ و طنز پاسخ بده. از جوک و لطیفه استفاده کن.",
+        "description": "شوخ و طنز"
+    },
+    "خجالتی": {
+        "emoji": "😳",
+        "prompt": "با لحن خجالتی و کم‌رو پاسخ بده. انگار که خجالت میکشی. از کلمات نرم استفاده کن.",
+        "description": "کم‌رو و نرم"
+    },
+    "باهوش": {
+        "emoji": "🧠",
+        "prompt": "با لحن علمی و دقیق پاسخ بده. از کلمات تخصصی استفاده کن.",
+        "description": "علمی و دقیق"
+    },
+    "دارک": {
+        "emoji": "🌙",
+        "prompt": "با لحن تاریک و مرموز پاسخ بده. انگار که رازهایی داری.",
+        "description": "تاریک و مرموز"
+    }
+}
+
+# ========================================
+# ========================================
+# ===== کیبورد منوی کاربر =====
+# ========================================
+# ========================================
+
 def user_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text="📚 کتاب‌ها")],
+            [KeyboardButton(text="📖 مانگا")],
+            [KeyboardButton(text="🎨 مانهوا")],
+            [KeyboardButton(text="💬 چت")],
             [KeyboardButton(text="💬 نظر و پیشنهاد")],
             [KeyboardButton(text="⭐ امتیاز به ربات")],
-            [KeyboardButton(text="📱 فیلترشکن")],
         ],
         resize_keyboard=True
     )
 
 # ========================================
+# ========================================
+# ===== کیبورد انتخاب شخصیت =====
+# ========================================
+# ========================================
+
+def personality_keyboard():
+    buttons = []
+    for name, data in PERSONALITIES.items():
+        buttons.append([InlineKeyboardButton(
+            text=f"{data['emoji']} {name}",
+            callback_data=f"personality_{name}"
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# ========================================
+# ========================================
 # ===== کیبورد عضویت =====
 # ========================================
+# ========================================
+
 def join_keyboard():
     channels = get_channels()
     buttons = []
@@ -33,8 +97,11 @@ def join_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # ========================================
-# ===== ارسال بنر =====
 # ========================================
+# ===== ارسال بنر (پشتیبانی از فوروارد) =====
+# ========================================
+# ========================================
+
 async def send_banner(message):
     banner = get_banner()
     if banner["type"] == "photo" and banner["file_id"]:
@@ -47,155 +114,314 @@ async def send_banner(message):
         await message.answer(banner["text"])
 
 # ========================================
-# ===== ارسال کتاب =====
 # ========================================
-async def send_book(message, book_id):
-    book = get_book(book_id)
-    if not book:
-        await message.answer("❌ کتاب پیدا نشد!")
+# ===== تابع چت با جیمینای (کیوت) =====
+# ========================================
+# ========================================
+
+async def chat_with_gemini(message, personality="کیوت"):
+    """چت با جیمینای با شخصیت مشخص"""
+    if not GEMINI_API_KEY:
+        await message.answer("❌ جیمینای در دسترس نیست!")
         return
     
-    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = book
+    personality_data = PERSONALITIES.get(personality, PERSONALITIES["کیوت"])
     
-    text = f"📖 **{title}**\n\n"
-    if author:
-        text += f"✍️ **نویسنده:** {author}\n"
-    if genre:
-        text += f"📂 **ژانر:** {genre}\n"
-    if downloads:
-        text += f"📥 **دانلودها:** {downloads} بار\n"
-    if description:
-        text += f"\n📝 **توضیحات:**\n{description}\n"
-    text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
+    prompt = f"""{personality_data['prompt']}
+
+به فارسی پاسخ بده. پاسخ‌هات کوتاه و جذاب باشه.
+هیچوقت نگو که من جیمینای یا هوش مصنوعی هستم.
+خودت رو یه دوست صمیمی معرفی کن.
+
+سوال: {message.text}
+"""
     
+    await message.answer("🤔 دارم فکر میکنم...")
+    
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=60) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    result = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    if result:
+                        await message.answer(result)
+                    else:
+                        await message.answer("🌸 یه جوابی به ذهنم نرسید! دوباره بپرس 😊")
+                else:
+                    await message.answer("🌸 نتونستم جواب بدم! دوباره تلاش کن 😊")
+    except:
+        await message.answer("🌸 یه مشکلی پیش اومد! بعداً دوباره امتحان کن 😊")
+
+# ========================================
+# ========================================
+# ===== منوی کتاب‌ها با چپترها =====
+# ========================================
+# ========================================
+
+def books_list_keyboard(books, prefix="book"):
+    """ساخت دکمه‌های چپترها"""
+    buttons = []
+    for book in books:
+        book_id = book[0]
+        title = book[1]
+        buttons.append([InlineKeyboardButton(
+            text=f"📖 {title}",
+            callback_data=f"{prefix}_{book_id}"
+        )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+# ========================================
+# ========================================
+# ===== استارت =====
+# ========================================
+# ========================================
+
+@router.message(CommandStart())
+async def start(message: types.Message):
+    args = message.text.split()
+    
+    add_user(
+        message.from_user.id,
+        message.from_user.username or "",
+        message.from_user.full_name or ""
+    )
+    
+    if len(args) == 1:
+        await send_banner(message)
+        await message.answer(
+            f"👋 **سلام {message.from_user.first_name}!**\n\n"
+            "🌸 به ربات خوش اومدی!",
+            reply_markup=user_menu_keyboard()
+        )
+        return
+    
+    code = args[1]
+    if code.startswith("book_"):
+        try:
+            book_id = int(code.replace("book_", ""))
+            channels = get_channels()
+            if channels:
+                with open("temp.json", "w") as f:
+                    json.dump({"book_id": book_id, "type": "book"}, f)
+                await message.answer(
+                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
+                    reply_markup=join_keyboard()
+                )
+                return
+            await send_book(message, book_id)
+        except ValueError:
+            await message.answer("❌ لینک نامعتبر!")
+    elif code.startswith("manga_"):
+        try:
+            manga_id = int(code.replace("manga_", ""))
+            channels = get_channels()
+            if channels:
+                with open("temp.json", "w") as f:
+                    json.dump({"manga_id": manga_id, "type": "manga"}, f)
+                await message.answer(
+                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
+                    reply_markup=join_keyboard()
+                )
+                return
+            await send_manga(message, manga_id)
+        except ValueError:
+            await message.answer("❌ لینک نامعتبر!")
+    elif code.startswith("manhwa_"):
+        try:
+            manhwa_id = int(code.replace("manhwa_", ""))
+            channels = get_channels()
+            if channels:
+                with open("temp.json", "w") as f:
+                    json.dump({"manhwa_id": manhwa_id, "type": "manhwa"}, f)
+                await message.answer(
+                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
+                    reply_markup=join_keyboard()
+                )
+                return
+            await send_manhwa(message, manhwa_id)
+        except ValueError:
+            await message.answer("❌ لینک نامعتبر!")
+    else:
+        await message.answer("❌ لینک نامعتبر!")
+
+# ========================================
+# ========================================
+# ===== کتاب‌ها (لیست) =====
+# ========================================
+# ========================================
+
+@router.message(lambda m: m.text == "📚 کتاب‌ها")
+async def list_books_user(message: types.Message):
+    books = get_all_books()
+    if not books:
+        await message.answer("❌ هیچ کتابی موجود نیست!")
+        return
+    
+    await message.answer(
+        "📚 **لیست کتاب‌ها:**\n\n"
+        "یک کتاب رو انتخاب کن:",
+        reply_markup=books_list_keyboard(books, "book")
+    )
+
+@router.message(lambda m: m.text == "📖 مانگا")
+async def list_manga_user(message: types.Message):
+    manga_list = get_all_manga()
+    if not manga_list:
+        await message.answer("❌ هیچ مانگایی موجود نیست!")
+        return
+    
+    await message.answer(
+        "📖 **لیست مانگاها:**\n\n"
+        "یک مانگا رو انتخاب کن:",
+        reply_markup=books_list_keyboard(manga_list, "manga")
+    )
+
+@router.message(lambda m: m.text == "🎨 مانهوا")
+async def list_manhwa_user(message: types.Message):
+    manhwa_list = get_all_manhwa()
+    if not manhwa_list:
+        await message.answer("❌ هیچ مانهوایی موجود نیست!")
+        return
+    
+    await message.answer(
+        "🎨 **لیست مانهواها:**\n\n"
+        "یک مانهوا رو انتخاب کن:",
+        reply_markup=books_list_keyboard(manhwa_list, "manhwa")
+    )
+
+# ========================================
+# ========================================
+# ===== نمایش چپترها =====
+# ========================================
+# ========================================
+
+@router.callback_query(lambda c: c.data.startswith("book_") or c.data.startswith("manga_") or c.data.startswith("manhwa_"))
+async def show_chapters(call: types.CallbackQuery):
+    data = call.data.split("_")
+    item_type = data[0]
+    item_id = int(data[1])
+    
+    if item_type == "book":
+        item = get_book(item_id)
+        title = item[1]
+        file_id = item[6]
+        caption = f"📖 **{title}**\n\n📝 چپترهای این کتاب:"
+    elif item_type == "manga":
+        item = get_manga(item_id)
+        title = item[1]
+        file_id = item[6]
+        caption = f"📖 **{title}**\n\n📝 چپترهای این مانگا:"
+    elif item_type == "manhwa":
+        item = get_manhwa(item_id)
+        title = item[1]
+        file_id = item[6]
+        caption = f"🎨 **{title}**\n\n📝 چپترهای این مانهوا:"
+    else:
+        await call.answer("❌ پیدا نشد!")
+        return
+    
+    # دکمه‌های چپترها
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_book_{book_id}")]
+        [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_{item_type}_{item_id}")],
+        [InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"back_to_{item_type}s")]
     ])
     
-    if cover_file_id:
-        await message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
-    else:
-        await message.answer(text, reply_markup=keyboard)
+    await call.message.edit_text(
+        caption,
+        reply_markup=keyboard
+    )
 
-@router.callback_query(lambda c: c.data.startswith("download_book_"))
-async def download_book(call: types.CallbackQuery):
-    book_id = int(call.data.replace("download_book_", ""))
-    book = get_book(book_id)
-    if not book:
-        await call.answer("❌ کتاب پیدا نشد!", show_alert=True)
+@router.callback_query(lambda c: c.data.startswith("download_"))
+async def download_item(call: types.CallbackQuery):
+    data = call.data.replace("download_", "").split("_")
+    item_type = data[0]
+    item_id = int(data[1])
+    
+    if item_type == "book":
+        item = get_book(item_id)
+    elif item_type == "manga":
+        item = get_manga(item_id)
+    elif item_type == "manhwa":
+        item = get_manhwa(item_id)
+    else:
+        await call.answer("❌ پیدا نشد!")
         return
-    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = book
-    increment_download(book_id)
-    await call.message.answer_document(file_id, caption=f"📖 **{title}**\n\n✅ دانلود شد!")
+    
+    if not item:
+        await call.answer("❌ پیدا نشد!")
+        return
+    
+    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = item
+    
+    # افزایش دانلود
+    if item_type == "book":
+        increment_download(item_id)
+    elif item_type == "manga":
+        increment_download(item_id)
+    elif item_type == "manhwa":
+        increment_download(item_id)
+    
+    # ارسال بنر + فایل
+    await send_banner(call.message)
+    await call.message.answer_document(
+        file_id,
+        caption=f"📖 **{title}**\n\n✅ دانلود شد!"
+    )
     await call.answer("✅ دانلود شروع شد!")
 
-# ========================================
-# ===== ارسال مانگا =====
-# ========================================
-async def send_manga(message, manga_id):
-    manga = get_manga(manga_id)
-    if not manga:
-        await message.answer("❌ مانگا پیدا نشد!")
-        return
-    
-    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = manga
-    
-    text = f"📖 **{title}**\n\n"
-    if author:
-        text += f"✍️ **نویسنده:** {author}\n"
-    if genre:
-        text += f"📂 **ژانر:** {genre}\n"
-    if downloads:
-        text += f"📥 **دانلودها:** {downloads} بار\n"
-    if description:
-        text += f"\n📝 **توضیحات:**\n{description}\n"
-    text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_manga_{manga_id}")]
-    ])
-    
-    if cover_file_id:
-        await message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
-    else:
-        await message.answer(text, reply_markup=keyboard)
-
-@router.callback_query(lambda c: c.data.startswith("download_manga_"))
-async def download_manga(call: types.CallbackQuery):
-    manga_id = int(call.data.replace("download_manga_", ""))
-    manga = get_manga(manga_id)
-    if not manga:
-        await call.answer("❌ مانگا پیدا نشد!", show_alert=True)
-        return
-    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = manga
-    increment_download(manga_id)
-    await call.message.answer_document(file_id, caption=f"📖 **{title}**\n\n✅ دانلود شد!")
-    await call.answer("✅ دانلود شروع شد!")
-
-# ========================================
-# ===== ارسال مانهوا =====
-# ========================================
-async def send_manhwa(message, manhwa_id):
-    manhwa = get_manhwa(manhwa_id)
-    if not manhwa:
-        await message.answer("❌ مانهوا پیدا نشد!")
-        return
-    
-    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = manhwa
-    
-    text = f"🎨 **{title}**\n\n"
-    if author:
-        text += f"✍️ **نویسنده:** {author}\n"
-    if genre:
-        text += f"📂 **ژانر:** {genre}\n"
-    if downloads:
-        text += f"📥 **دانلودها:** {downloads} بار\n"
-    if description:
-        text += f"\n📝 **توضیحات:**\n{description}\n"
-    text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_manhwa_{manhwa_id}")]
-    ])
-    
-    if cover_file_id:
-        await message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
-    else:
-        await message.answer(text, reply_markup=keyboard)
-
-@router.callback_query(lambda c: c.data.startswith("download_manhwa_"))
-async def download_manhwa(call: types.CallbackQuery):
-    manhwa_id = int(call.data.replace("download_manhwa_", ""))
-    manhwa = get_manhwa(manhwa_id)
-    if not manhwa:
-        await call.answer("❌ مانهوا پیدا نشد!", show_alert=True)
-        return
-    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = manhwa
-    increment_download(manhwa_id)
-    await call.message.answer_document(file_id, caption=f"🎨 **{title}**\n\n✅ دانلود شد!")
-    await call.answer("✅ دانلود شروع شد!")
+@router.callback_query(lambda c: c.data.startswith("back_to_"))
+async def back_to_list(call: types.CallbackQuery):
+    item_type = call.data.replace("back_to_", "")
+    if item_type == "books":
+        await list_books_user(call.message)
+    elif item_type == "mangas":
+        await list_manga_user(call.message)
+    elif item_type == "manhwas":
+        await list_manhwa_user(call.message)
 
 # ========================================
 # ========================================
-# ===== دریافت فایل با رمز (اصلاح شده) =====
+# ===== چت با جیمینای (با شخصیت) =====
 # ========================================
 # ========================================
 
-# ===== این هندلر فقط وقتی فعال میشه که کاربر توی حالت رمز باشه =====
-@router.message(lambda m: m.text and not m.text.startswith("/") and user_states.get(m.from_user.id, {}).get("state") == "waiting_password")
-async def handle_password_file(message: types.Message):
-    file_info = get_password_file_by_code(message.text.strip())
-    if file_info:
-        file_id, name, file_type, caption = file_info[2], file_info[1], file_info[3], file_info[4]
-        if file_type == "photo":
-            await message.answer_photo(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
-        elif file_type == "video":
-            await message.answer_video(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
-        else:
-            await message.answer_document(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
+@router.message(lambda m: m.text == "💬 چت")
+async def chat_start(message: types.Message):
+    user_states[message.from_user.id] = {"state": "waiting_chat_personality"}
+    await message.answer(
+        "🌸 **انتخاب شخصیت:**\n\n"
+        "یکی از شخصیت‌های زیر رو انتخاب کن:",
+        reply_markup=personality_keyboard()
+    )
+
+@router.callback_query(lambda c: c.data.startswith("personality_"))
+async def set_personality(call: types.CallbackQuery):
+    personality = call.data.replace("personality_", "")
+    user_states[call.from_user.id] = {
+        "state": "waiting_chat_message",
+        "personality": personality
+    }
+    
+    emoji = PERSONALITIES.get(personality, {}).get("emoji", "🌸")
+    await call.message.edit_text(
+        f"{emoji} **شخصیت {personality} انتخاب شد!**\n\n"
+        "حالا هر چی دوست داری بپرس! 😊\n"
+        "برای بستن /cancel بفرست."
+    )
+
+@router.message(lambda m: m.text and user_states.get(m.from_user.id, {}).get("state") == "waiting_chat_message")
+async def chat_response(message: types.Message):
+    if message.text == "/cancel":
         user_states[message.from_user.id] = {}
-    else:
-        await message.answer("❌ رمز اشتباه است! دوباره امتحان کن.")
+        await message.answer("✅ چت بسته شد! 🌸")
+        return
+    
+    personality = user_states[message.from_user.id].get("personality", "کیوت")
+    await chat_with_gemini(message, personality)
 
 # ========================================
 # ========================================
@@ -244,129 +470,93 @@ async def save_rating(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# ===== فیلترشکن =====
+# ===== ارسال کتاب (برای لینک‌ها) =====
 # ========================================
 # ========================================
 
-@router.message(lambda m: m.text == "📱 فیلترشکن")
-async def list_vpn_user(message: types.Message):
-    vpn_list = get_all_vpn()
-    if not vpn_list:
-        await message.answer("❌ هیچ فیلترشکنی موجود نیست!")
+async def send_book(message, book_id):
+    book = get_book(book_id)
+    if not book:
+        await message.answer("❌ کتاب پیدا نشد!")
         return
+    
+    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = book
+    
+    text = f"📖 **{title}**\n\n"
+    if author:
+        text += f"✍️ **نویسنده:** {author}\n"
+    if genre:
+        text += f"📂 **ژانر:** {genre}\n"
+    if downloads:
+        text += f"📥 **دانلودها:** {downloads} بار\n"
+    if description:
+        text += f"\n📝 **توضیحات:**\n{description}\n"
+    text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🔹 {vpn[1]}", callback_data=f"vpn_{vpn[0]}")] for vpn in vpn_list
+        [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_book_{book_id}")]
     ])
     
-    await message.answer(
-        "📱 **معرفی فیلترشکن‌های قوی**\n\n"
-        "یکی از گزینه‌های زیر رو انتخاب کن:",
-        reply_markup=keyboard
-    )
+    if cover_file_id:
+        await message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
+    else:
+        await message.answer(text, reply_markup=keyboard)
 
-@router.callback_query(lambda c: c.data.startswith("vpn_"))
-async def show_vpn(call: types.CallbackQuery):
-    vpn_id = int(call.data.replace("vpn_", ""))
-    vpn = get_vpn(vpn_id)
-    if not vpn:
-        await call.answer("❌ فیلترشکن پیدا نشد!", show_alert=True)
+async def send_manga(message, manga_id):
+    manga = get_manga(manga_id)
+    if not manga:
+        await message.answer("❌ مانگا پیدا نشد!")
         return
     
-    _, name, description, logo_file_id, video_file_id, link = vpn
+    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = manga
+    
+    text = f"📖 **{title}**\n\n"
+    if author:
+        text += f"✍️ **نویسنده:** {author}\n"
+    if genre:
+        text += f"📂 **ژانر:** {genre}\n"
+    if downloads:
+        text += f"📥 **دانلودها:** {downloads} بار\n"
+    if description:
+        text += f"\n📝 **توضیحات:**\n{description}\n"
+    text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎬 مشاهده ویدیو", url=link)],
-        [InlineKeyboardButton(text="🔗 دریافت لینک", url=link)],
-        [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_vpn")]
+        [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_manga_{manga_id}")]
     ])
     
-    text = f"📱 **معرفی فیلترشکن {name}**\n\n"
-    text += f"📝 {description}\n\n"
-    text += f"🔗 لینک: {link}"
-    
-    if logo_file_id:
-        await call.message.answer_photo(logo_file_id, caption=text, reply_markup=keyboard)
+    if cover_file_id:
+        await message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
     else:
-        await call.message.answer(text, reply_markup=keyboard)
+        await message.answer(text, reply_markup=keyboard)
 
-@router.callback_query(lambda c: c.data == "back_to_vpn")
-async def back_to_vpn(call: types.CallbackQuery):
-    await list_vpn_user(call.message)
-
-# ========================================
-# ========================================
-# ===== استارت =====
-# ========================================
-# ========================================
-
-@router.message(CommandStart())
-async def start(message: types.Message):
-    args = message.text.split()
-    
-    add_user(
-        message.from_user.id,
-        message.from_user.username or "",
-        message.from_user.full_name or ""
-    )
-    
-    if len(args) == 1:
-        await send_banner(message)
-        await message.answer(
-            f"👋 **سلام {message.from_user.first_name}!**\n\n"
-            "به ربات خوش اومدی!",
-            reply_markup=user_menu_keyboard()
-        )
+async def send_manhwa(message, manhwa_id):
+    manhwa = get_manhwa(manhwa_id)
+    if not manhwa:
+        await message.answer("❌ مانهوا پیدا نشد!")
         return
     
-    code = args[1]
-    if code.startswith("book_"):
-        try:
-            book_id = int(code.replace("book_", ""))
-            channels = get_channels()
-            if channels:
-                with open("temp.json", "w") as f:
-                    json.dump({"book_id": book_id}, f)
-                await message.answer(
-                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
-                    reply_markup=join_keyboard()
-                )
-                return
-            await send_book(message, book_id)
-        except ValueError:
-            await message.answer("❌ لینک نامعتبر!")
-    elif code.startswith("manga_"):
-        try:
-            manga_id = int(code.replace("manga_", ""))
-            channels = get_channels()
-            if channels:
-                with open("temp.json", "w") as f:
-                    json.dump({"manga_id": manga_id}, f)
-                await message.answer(
-                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
-                    reply_markup=join_keyboard()
-                )
-                return
-            await send_manga(message, manga_id)
-        except ValueError:
-            await message.answer("❌ لینک نامعتبر!")
-    elif code.startswith("manhwa_"):
-        try:
-            manhwa_id = int(code.replace("manhwa_", ""))
-            channels = get_channels()
-            if channels:
-                with open("temp.json", "w") as f:
-                    json.dump({"manhwa_id": manhwa_id}, f)
-                await message.answer(
-                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
-                    reply_markup=join_keyboard()
-                )
-                return
-            await send_manhwa(message, manhwa_id)
-        except ValueError:
-            await message.answer("❌ لینک نامعتبر!")
+    _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = manhwa
+    
+    text = f"🎨 **{title}**\n\n"
+    if author:
+        text += f"✍️ **نویسنده:** {author}\n"
+    if genre:
+        text += f"📂 **ژانر:** {genre}\n"
+    if downloads:
+        text += f"📥 **دانلودها:** {downloads} بار\n"
+    if description:
+        text += f"\n📝 **توضیحات:**\n{description}\n"
+    text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_manhwa_{manhwa_id}")]
+    ])
+    
+    if cover_file_id:
+        await message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
     else:
-        await message.answer("❌ لینک نامعتبر!")
+        await message.answer(text, reply_markup=keyboard)
 
 # ========================================
 # ========================================
@@ -382,6 +572,7 @@ async def check_mem(call: types.CallbackQuery):
         book_id = data.get("book_id")
         manga_id = data.get("manga_id")
         manhwa_id = data.get("manhwa_id")
+        item_type = data.get("type", "book")
     except:
         await call.message.edit_text("❌ لینک نامعتبر!")
         return
@@ -398,9 +589,9 @@ async def check_mem(call: types.CallbackQuery):
     
     await call.message.delete()
     
-    if book_id:
+    if item_type == "book" and book_id:
         await send_book(call.message, book_id)
-    elif manga_id:
+    elif item_type == "manga" and manga_id:
         await send_manga(call.message, manga_id)
-    elif manhwa_id:
+    elif item_type == "manhwa" and manhwa_id:
         await send_manhwa(call.message, manhwa_id)
