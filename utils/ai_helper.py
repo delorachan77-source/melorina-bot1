@@ -1,176 +1,523 @@
 import aiohttp
-import json
 import fitz  # PyMuPDF
 import asyncio
 from config import GEMINI_API_KEY
 
+
 # ========================================
+# تنظیمات Gemini
 # ========================================
-# ===== ارسال به جیمینای =====
+
+API_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+# اولویت مدل‌ها:
+# مدل‌های جدیدتر را اول امتحان می‌کنیم.
+PREFERRED_MODELS = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash",
+]
+
+
 # ========================================
+# پیدا کردن مدل قابل استفاده
+# ========================================
+
+async def get_available_model():
+    """
+    مدل‌های در دسترس API را می‌گیرد و مدلی را انتخاب می‌کند
+    که generateContent را پشتیبانی کند.
+    """
+
+    if not GEMINI_API_KEY:
+        return None
+
+    url = f"{API_URL}/models"
+
+    headers = {
+        "x-goog-api-key": GEMINI_API_KEY
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=20)
+            ) as response:
+
+                if response.status != 200:
+                    error = await response.text()
+                    print(
+                        f"❌ خطا در دریافت لیست مدل‌ها: "
+                        f"{response.status} - {error[:500]}"
+                    )
+                    return None
+
+                data = await response.json()
+
+                models = data.get("models", [])
+
+                available = []
+
+                for model in models:
+                    name = model.get("name", "")
+                    methods = model.get(
+                        "supportedGenerationMethods",
+                        []
+                    )
+
+                    if "generateContent" in methods:
+                        model_id = name.replace("models/", "")
+                        available.append(model_id)
+
+                if not available:
+                    print("❌ هیچ مدل دارای generateContent پیدا نشد!")
+                    return None
+
+                # اولویت مدل‌های موردنظر
+                for preferred in PREFERRED_MODELS:
+                    if preferred in available:
+                        print(
+                            f"✅ مدل انتخاب شد: {preferred}"
+                        )
+                        return preferred
+
+                # اگر مدل‌های بالا موجود نبودند،
+                # یک مدل Flash مناسب پیدا کن
+                flash_models = [
+                    m for m in available
+                    if "flash" in m.lower()
+                ]
+
+                if flash_models:
+                    print(
+                        f"✅ مدل Flash موجود انتخاب شد: "
+                        f"{flash_models[0]}"
+                    )
+                    return flash_models[0]
+
+                # در نهایت اولین مدل قابل استفاده
+                print(
+                    f"✅ مدل موجود انتخاب شد: {available[0]}"
+                )
+                return available[0]
+
+    except asyncio.TimeoutError:
+        print("❌ Timeout هنگام دریافت مدل‌های Gemini")
+        return None
+
+    except aiohttp.ClientError as e:
+        print(f"❌ خطای اتصال هنگام دریافت مدل‌ها: {e}")
+        return None
+
+    except Exception as e:
+        print(f"❌ خطا در پیدا کردن مدل Gemini: {e}")
+        return None
+
+
+# ========================================
+# ارسال درخواست به Gemini
 # ========================================
 
 async def call_gemini(prompt):
-    """ارسال درخواست به جیمینای"""
+    """ارسال درخواست به Gemini"""
+
     if not GEMINI_API_KEY:
-        return "❌ کلید جیمینای تنظیم نشده! لطفاً GEMINI_API_KEY رو توی .env تنظیم کن."
-    
+        return (
+            "❌ کلید جیمینای تنظیم نشده!\n\n"
+            "لطفاً GEMINI_API_KEY را در فایل .env تنظیم کن."
+        )
+
+    if not prompt or not str(prompt).strip():
+        return "❌ متن درخواست خالی است!"
+
     try:
-        # ===== استفاده از مدل gemini-pro (پایدارترین) =====
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-        
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
+        # پیدا کردن مدل واقعی و فعال
+        model = await get_available_model()
+
+        if not model:
+            return (
+                "❌ هیچ مدل فعال Gemini برای این API Key پیدا نشد!\n\n"
+                "کلید Gemini را بررسی کن."
+            )
+
+        url = (
+            f"{API_URL}/models/"
+            f"{model}:generateContent"
+        )
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY
         }
-        
-        headers = {"Content-Type": "application/json"}
-        
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": str(prompt)
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 8192
+            }
+        }
+
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers, timeout=60) as response:
+
+            async with session.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=120)
+            ) as response:
+
+                response_text = await response.text()
+
+                # ========================================
+                # موفق
+                # ========================================
+
                 if response.status == 200:
-                    data = await response.json()
-                    result = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                    if result:
-                        return result
-                    else:
-                        return "❌ جیمینای پاسخی برنگرداند!"
+
+                    try:
+                        data = await response.json()
+
+                        candidates = data.get(
+                            "candidates",
+                            []
+                        )
+
+                        if not candidates:
+                            print(
+                                f"❌ Gemini candidate برنگرداند: "
+                                f"{response_text[:1000]}"
+                            )
+                            return (
+                                "❌ جیمینای پاسخی برنگرداند."
+                            )
+
+                        content = candidates[0].get(
+                            "content",
+                            {}
+                        )
+
+                        parts = content.get(
+                            "parts",
+                            []
+                        )
+
+                        result = ""
+
+                        for part in parts:
+                            if "text" in part:
+                                result += part["text"]
+
+                        if result.strip():
+                            return result.strip()
+
+                        return (
+                            "❌ جیمینای پاسخ متنی برنگرداند."
+                        )
+
+                    except Exception as e:
+                        print(
+                            f"❌ خطا در خواندن پاسخ Gemini: {e}"
+                        )
+                        return (
+                            "❌ پاسخ جیمینای قابل خواندن نبود."
+                        )
+
+                # ========================================
+                # خطاها
+                # ========================================
+
+                print(
+                    f"❌ Gemini Error "
+                    f"{response.status}: "
+                    f"{response_text[:1500]}"
+                )
+
+                if response.status == 400:
+                    return (
+                        "❌ درخواست به جیمینای نامعتبر بود.\n\n"
+                        "جزئیات خطا در کنسول چاپ شده."
+                    )
+
+                elif response.status == 401:
+                    return (
+                        "❌ کلید Gemini معتبر نیست.\n\n"
+                        "GEMINI_API_KEY را بررسی کن."
+                    )
+
+                elif response.status == 403:
+                    return (
+                        "❌ دسترسی به Gemini با این API Key "
+                        "مجاز نیست.\n\n"
+                        "کلید API را بررسی کن."
+                    )
+
+                elif response.status == 404:
+                    return (
+                        f"❌ مدل `{model}` پیدا نشد.\n\n"
+                        "مدل‌های فعال دوباره بررسی شدند، "
+                        "اما این مدل در زمان درخواست در دسترس نبود."
+                    )
+
+                elif response.status == 429:
+                    return (
+                        "❌ تعداد درخواست‌های Gemini زیاد شده.\n\n"
+                        "چند لحظه بعد دوباره امتحان کن."
+                    )
+
+                elif response.status >= 500:
+                    return (
+                        "❌ سرور Gemini موقتاً مشکل دارد.\n\n"
+                        "چند لحظه بعد دوباره امتحان کن."
+                    )
+
                 else:
-                    error_text = await response.text()
-                    print(f"❌ خطای جیمینای: {response.status} - {error_text}")
-                    
-                    if response.status == 403:
-                        return "❌ کلید جیمینای نامعتبر است! لطفاً کلید جدید از https://aistudio.google.com/ بگیر."
-                    elif response.status == 404:
-                        return "❌ مدل جیمینای پیدا نشد! لطفاً کلید خود را بررسی کن."
-                    elif response.status == 429:
-                        return "❌ تعداد درخواست‌ها زیاد شده! چند دقیقه دیگه امتحان کن."
-                    else:
-                        return f"❌ خطای جیمینای: {response.status}"
+                    return (
+                        f"❌ خطای Gemini: "
+                        f"{response.status}"
+                    )
+
     except asyncio.TimeoutError:
-        return "❌ زمان درخواست به جیمینای تمام شد! دوباره تلاش کن."
+        return (
+            "❌ زمان اتصال به Gemini تمام شد!\n"
+            "دوباره امتحان کن."
+        )
+
     except aiohttp.ClientError as e:
-        return f"❌ خطای اتصال به جیمینای: {str(e)[:100]}"
+        print(f"❌ خطای شبکه Gemini: {e}")
+        return (
+            "❌ خطا در اتصال به سرور Gemini.\n"
+            "اتصال اینترنت سرور را بررسی کن."
+        )
+
     except Exception as e:
-        print(f"❌ خطا: {e}")
-        return f"❌ خطای داخلی: {str(e)[:100]}"
+        print(f"❌ خطای داخلی Gemini: {e}")
+        return (
+            f"❌ خطای داخلی جیمینای:\n"
+            f"{str(e)[:300]}"
+        )
+
 
 # ========================================
-# ========================================
-# ===== مترجم =====
-# ========================================
+# مترجم
 # ========================================
 
 async def translate_text(text, target_lang="fa"):
-    """ترجمه متن با جیمینای"""
+    """ترجمه متن با Gemini"""
+
     if not text or len(text.strip()) < 2:
         return "❌ متن کافی برای ترجمه وجود ندارد!"
-    
-    lang_name = "فارسی" if target_lang == "fa" else "انگلیسی"
-    prompt = f"متن زیر را به {lang_name} ترجمه کن. ترجمه روان و طبیعی باشد:\n\n{text}"
+
+    if target_lang == "fa":
+        lang_name = "فارسی"
+    elif target_lang == "en":
+        lang_name = "انگلیسی"
+    else:
+        lang_name = target_lang
+
+    prompt = f"""
+متن زیر را به {lang_name} ترجمه کن.
+
+قوانین:
+- ترجمه روان و طبیعی باشد.
+- معنی اصلی متن حفظ شود.
+- چیزی به متن اضافه نکن.
+- چیزی از متن حذف نکن.
+- فقط ترجمه را ارائه بده.
+
+متن:
+
+{text}
+"""
+
     return await call_gemini(prompt)
 
+
 # ========================================
-# ========================================
-# ===== خلاصه‌سازی =====
-# ========================================
+# خلاصه‌سازی
 # ========================================
 
 async def summarize_text(text):
-    """خلاصه‌سازی متن با جیمینای"""
+    """خلاصه‌سازی متن با Gemini"""
+
     if not text or len(text.strip()) < 50:
-        return "❌ متن کافی برای خلاصه‌سازی وجود ندارد! حداقل ۵۰ کاراکتر نیاز است."
-    
-    if len(text) > 5000:
-        text = text[:5000] + "..."
-    
-    prompt = f"خلاصه زیر رو به فارسی بنویس (حداکثر ۱۰ خط، نکات کلیدی رو پوشش بده):\n\n{text}"
+        return (
+            "❌ متن کافی برای خلاصه‌سازی وجود ندارد!\n"
+            "حداقل ۵۰ کاراکتر نیاز است."
+        )
+
+    # جلوگیری از درخواست بیش از حد بزرگ
+    if len(text) > 30000:
+        text = text[:30000] + "\n..."
+
+    prompt = f"""
+متن زیر را به زبان فارسی خلاصه کن.
+
+قوانین:
+- نکات مهم را حفظ کن.
+- خلاصه واضح و منظم باشد.
+- از حاشیه رفتن خودداری کن.
+- اطلاعات مهم حذف نشود.
+- در صورت امکان از تیتر و bullet استفاده کن.
+
+متن:
+
+{text}
+"""
+
     return await call_gemini(prompt)
 
+
 # ========================================
-# ========================================
-# ===== تحلیل کتاب =====
-# ========================================
+# تحلیل کتاب
 # ========================================
 
 async def analyze_book(text):
-    """تحلیل کتاب با جیمینای"""
+    """تحلیل کتاب با Gemini"""
+
     if not text or len(text.strip()) < 100:
-        return "❌ متن کافی برای تحلیل وجود ندارد! حداقل ۱۰۰ کاراکتر نیاز است."
-    
-    if len(text) > 5000:
-        text = text[:5000] + "..."
-    
+        return (
+            "❌ متن کافی برای تحلیل وجود ندارد!\n"
+            "حداقل ۱۰۰ کاراکتر نیاز است."
+        )
+
+    # محدودیت منطقی برای جلوگیری از درخواست خیلی سنگین
+    if len(text) > 30000:
+        text = text[:30000] + "\n..."
+
     prompt = f"""
-    کتاب زیر را به زبان فارسی تحلیل کن:
-    
-    ۱. شخصیت‌های اصلی (نام و نقش)
-    ۲. تم‌های اصلی (موضوعات کلیدی)
-    ۳. سبک نوشتاری (روایت، زبان)
-    ۴. نکات کلیدی (پیام‌های مهم)
-    ۵. جمع‌بندی نهایی
-    
-    متن کتاب:
-    {text}
-    """
+کتاب یا متن زیر را به زبان فارسی به صورت حرفه‌ای تحلیل کن.
+
+ساختار پاسخ:
+
+۱. شخصیت‌های اصلی
+- نام شخصیت
+- نقش و اهمیت او
+
+۲. تم‌ها و موضوعات اصلی
+- موضوعات کلیدی
+- مفاهیم مهم
+
+۳. سبک نوشتاری
+- نوع روایت
+- زبان و لحن
+- ویژگی‌های برجسته
+
+۴. نکات کلیدی
+- پیام‌های مهم
+- اتفاقات یا ایده‌های مهم
+
+۵. نقاط قوت و ضعف
+- نقاط قوت اثر
+- نقاط قابل بهبود
+
+۶. جمع‌بندی نهایی
+- یک جمع‌بندی روشن و مفید
+
+تحلیل باید بر اساس متن داده‌شده باشد و اطلاعات ساختگی اضافه نشود.
+
+متن کتاب:
+
+{text}
+"""
+
     return await call_gemini(prompt)
 
+
 # ========================================
-# ========================================
-# ===== استخراج متن از فایل =====
-# ========================================
+# استخراج متن PDF
 # ========================================
 
 async def extract_text_from_file(file_path):
     """استخراج متن از فایل PDF"""
+
     try:
+
         if not file_path:
             return None
-        
-        if file_path.endswith(".pdf"):
-            doc = fitz.open(file_path)
-            text = ""
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                text += page.get_text()
-            doc.close()
-            
-            if text.strip():
-                return text
-            else:
-                return "⚠️ فایل PDF متنی ندارد (ممکن است اسکن شده باشد)."
-        else:
+
+        if not file_path.lower().endswith(".pdf"):
             return None
+
+        doc = fitz.open(file_path)
+
+        text_parts = []
+
+        for page in doc:
+            page_text = page.get_text()
+
+            if page_text:
+                text_parts.append(page_text)
+
+        doc.close()
+
+        text = "\n".join(text_parts).strip()
+
+        if text:
+            return text
+
+        return (
+            "⚠️ فایل PDF متن قابل استخراج ندارد.\n"
+            "ممکن است فایل به صورت اسکن شده باشد."
+        )
+
     except Exception as e:
-        print(f"❌ خطا در استخراج متن: {e}")
+
+        print(
+            f"❌ خطا در استخراج متن PDF: {e}"
+        )
+
         return None
 
+
 # ========================================
-# ========================================
-# ===== تست اتصال جیمینای =====
-# ========================================
+# تست اتصال Gemini
 # ========================================
 
 async def test_gemini_connection():
-    """تست اتصال به جیمینای"""
+    """تست اتصال به Gemini"""
+
     if not GEMINI_API_KEY:
         return "❌ کلید جیمینای تنظیم نشده!"
-    
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-        payload = {
-            "contents": [{
-                "parts": [{"text": "سلام"}]
-            }]
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=10) as response:
-                if response.status == 200:
-                    return "✅ اتصال به جیمینای برقرار است!"
-                else:
-                    return f"❌ خطا در اتصال: {response.status}"
-    except Exception as e:
-        return f"❌ خطا: {str(e)[:100]}"
 
-print("✅ توابع جیمینای بارگذاری شدند!")
+    try:
+
+        model = await get_available_model()
+
+        if not model:
+            return (
+                "❌ هیچ مدل قابل استفاده‌ای پیدا نشد!"
+            )
+
+        result = await call_gemini(
+            "فقط بنویس: اتصال موفق است."
+        )
+
+        if result and not result.startswith("❌"):
+            return (
+                f"✅ اتصال به جیمینای برقرار است!\n"
+                f"🤖 مدل: {model}"
+            )
+
+        return result
+
+    except Exception as e:
+
+        return (
+            f"❌ خطا در تست Gemini:\n"
+            f"{str(e)[:300]}"
+        )
+
+
+print("✅ توابع Gemini بارگذاری شدند!")
