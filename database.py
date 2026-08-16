@@ -123,6 +123,41 @@ c.execute("""
     )
 """)
 
+c.execute("""
+    CREATE TABLE IF NOT EXISTS ads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        text TEXT,
+        file_id TEXT,
+        type TEXT DEFAULT 'text',
+        active INTEGER DEFAULT 1,
+        created_at TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS vpn (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        logo_file_id TEXT,
+        video_file_id TEXT,
+        link TEXT,
+        active INTEGER DEFAULT 1,
+        created_at TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS cleaned_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        original_file_id TEXT,
+        cleaned_file_id TEXT,
+        file_type TEXT,
+        created_at TEXT
+    )
+""")
+
 db.commit()
 print("✅ دیتابیس راه‌اندازی شد!")
 
@@ -374,6 +409,69 @@ def get_setting(key):
     return row[0] if row else None
 
 # ========================================
+# ===== توابع تبلیغات =====
+# ========================================
+def add_ad(title, text, file_id=None, ad_type="text"):
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT INTO ads (title, text, file_id, type, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (title, text, file_id, ad_type, now))
+    db.commit()
+    return c.lastrowid
+
+def get_all_ads():
+    c.execute("SELECT id, title, text, file_id, type, active FROM ads WHERE active=1 ORDER BY created_at DESC")
+    return c.fetchall()
+
+def delete_ad(ad_id):
+    c.execute("UPDATE ads SET active=0 WHERE id=?", (ad_id,))
+    db.commit()
+    return True
+
+# ========================================
+# ===== توابع فیلترشکن =====
+# ========================================
+def add_vpn(name, description, logo_file_id, video_file_id, link):
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT INTO vpn (name, description, logo_file_id, video_file_id, link, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (name, description, logo_file_id, video_file_id, link, now))
+    db.commit()
+    return c.lastrowid
+
+def get_all_vpn():
+    c.execute("SELECT id, name, description, logo_file_id, video_file_id, link FROM vpn WHERE active=1 ORDER BY created_at DESC")
+    return c.fetchall()
+
+def get_vpn(vpn_id):
+    c.execute("SELECT id, name, description, logo_file_id, video_file_id, link FROM vpn WHERE id=?", (vpn_id,))
+    return c.fetchone()
+
+def delete_vpn(vpn_id):
+    c.execute("UPDATE vpn SET active=0 WHERE id=?", (vpn_id,))
+    db.commit()
+    return True
+
+# ========================================
+# ===== توابع کلینر =====
+# ========================================
+def add_cleaned_file(original_file_id, cleaned_file_id, file_type):
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT INTO cleaned_files (original_file_id, cleaned_file_id, file_type, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (original_file_id, cleaned_file_id, file_type, now))
+    db.commit()
+    return c.lastrowid
+
+def get_cleaned_file(original_file_id):
+    c.execute("SELECT cleaned_file_id FROM cleaned_files WHERE original_file_id=?", (original_file_id,))
+    row = c.fetchone()
+    return row[0] if row else None
+
+# ========================================
 # ===== توابع کمکی =====
 # ========================================
 def backup_db():
@@ -402,6 +500,9 @@ def clear_all_data():
     c.execute("DELETE FROM robot_ratings")
     c.execute("DELETE FROM updates")
     c.execute("DELETE FROM settings")
+    c.execute("DELETE FROM ads")
+    c.execute("DELETE FROM vpn")
+    c.execute("DELETE FROM cleaned_files")
     db.commit()
     return True
 
