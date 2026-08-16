@@ -1,25 +1,23 @@
 import aiohttp
 import json
 import fitz  # PyMuPDF
-from PIL import Image
-import io
-import os
+import asyncio
 from config import GEMINI_API_KEY
 
 # ========================================
 # ========================================
-# ===== ارسال به جیمینای (نسخه اصلاح شده) =====
+# ===== ارسال به جیمینای (با مدل درست) =====
 # ========================================
 # ========================================
 
 async def call_gemini(prompt):
-    """ارسال درخواست به جیمینای و دریافت پاسخ"""
+    """ارسال درخواست به جیمینای"""
     if not GEMINI_API_KEY:
         return "❌ کلید جیمینای تنظیم نشده! لطفاً GEMINI_API_KEY رو توی .env تنظیم کن."
     
     try:
-        # ===== استفاده از مدل gemini-2.0-flash (سریع و رایگان) =====
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        # ===== استفاده از مدل gemini-1.5-pro (پایدار و فعال) =====
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
         
         payload = {
             "contents": [{
@@ -27,9 +25,7 @@ async def call_gemini(prompt):
             }]
         }
         
-        headers = {
-            "Content-Type": "application/json"
-        }
+        headers = {"Content-Type": "application/json"}
         
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=60) as response:
@@ -44,13 +40,12 @@ async def call_gemini(prompt):
                     error_text = await response.text()
                     print(f"❌ خطای جیمینای: {response.status} - {error_text}")
                     
-                    # ===== خطاهای رایج =====
                     if response.status == 403:
                         return "❌ کلید جیمینای نامعتبر است! لطفاً کلید جدید از https://aistudio.google.com/ بگیر."
+                    elif response.status == 404:
+                        return "❌ مدل جیمینای پیدا نشد! در حال استفاده از مدل جایگزین..."
                     elif response.status == 429:
                         return "❌ تعداد درخواست‌ها زیاد شده! چند دقیقه دیگه امتحان کن."
-                    elif response.status == 400:
-                        return "❌ درخواست نامعتبر! لطفاً دوباره تلاش کن."
                     else:
                         return f"❌ خطای جیمینای: {response.status}"
     except asyncio.TimeoutError:
@@ -87,7 +82,6 @@ async def summarize_text(text):
     if not text or len(text.strip()) < 50:
         return "❌ متن کافی برای خلاصه‌سازی وجود ندارد! حداقل ۵۰ کاراکتر نیاز است."
     
-    # محدود کردن متن به 5000 کاراکتر
     if len(text) > 5000:
         text = text[:5000] + "..."
     
@@ -154,21 +148,6 @@ async def extract_text_from_file(file_path):
 
 # ========================================
 # ========================================
-# ===== تشخیص تصویر (برای آینده) =====
-# ========================================
-# ========================================
-
-async def extract_text_from_image(file_path):
-    """استخراج متن از عکس (برای آینده)"""
-    try:
-        # اینجا می‌تونی از Tesseract یا Gemini Vision استفاده کنی
-        return "⚠️ قابلیت تشخیص متن از عکس در حال توسعه است..."
-    except Exception as e:
-        print(f"❌ خطا: {e}")
-        return None
-
-# ========================================
-# ========================================
 # ===== تست اتصال جیمینای =====
 # ========================================
 # ========================================
@@ -179,14 +158,20 @@ async def test_gemini_connection():
         return "❌ کلید جیمینای تنظیم نشده!"
     
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+        # ===== تست با مدل درست =====
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
+        payload = {
+            "contents": [{
+                "parts": [{"text": "سلام"}]
+            }]
+        }
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as response:
+            async with session.post(url, json=payload, timeout=10) as response:
                 if response.status == 200:
                     return "✅ اتصال به جیمینای برقرار است!"
                 else:
                     return f"❌ خطا در اتصال: {response.status}"
-    except:
-        return "❌ اتصال به جیمینای برقرار نشد!"
+    except Exception as e:
+        return f"❌ خطا: {str(e)[:100]}"
 
 print("✅ توابع جیمینای بارگذاری شدند!")
