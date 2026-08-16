@@ -6,8 +6,41 @@ DB_PATH = os.getenv("DB_PATH", "bot.db")
 db = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = db.cursor()
 
+# ===== جدول‌ها =====
 c.execute("""
     CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        author TEXT,
+        description TEXT,
+        genre TEXT,
+        cover_file_id TEXT,
+        file_id TEXT NOT NULL,
+        file_name TEXT,
+        file_size INTEGER,
+        downloads INTEGER DEFAULT 0,
+        created_at TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS manga (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        author TEXT,
+        description TEXT,
+        genre TEXT,
+        cover_file_id TEXT,
+        file_id TEXT NOT NULL,
+        file_name TEXT,
+        file_size INTEGER,
+        downloads INTEGER DEFAULT 0,
+        created_at TEXT
+    )
+""")
+
+c.execute("""
+    CREATE TABLE IF NOT EXISTS manhwa (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         author TEXT,
@@ -58,16 +91,6 @@ c.execute("""
 """)
 
 c.execute("""
-    CREATE TABLE IF NOT EXISTS admin_activities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        admin_id INTEGER,
-        action TEXT,
-        details TEXT,
-        created_at TEXT
-    )
-""")
-
-c.execute("""
     CREATE TABLE IF NOT EXISTS feedback (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -103,7 +126,9 @@ c.execute("""
 db.commit()
 print("✅ دیتابیس راه‌اندازی شد!")
 
-# ===== توابع =====
+# ========================================
+# ===== توابع کتاب‌ها =====
+# ========================================
 def add_book(title, author, description, genre, cover_file_id, file_id, file_name="", file_size=0):
     now = datetime.now().isoformat()
     c.execute("""
@@ -114,23 +139,23 @@ def add_book(title, author, description, genre, cover_file_id, file_id, file_nam
     return c.lastrowid
 
 def get_all_books():
-    c.execute("""
-        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
-        FROM books
-        ORDER BY created_at DESC
-    """)
+    c.execute("SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads FROM books ORDER BY created_at DESC")
     return c.fetchall()
 
 def get_book(book_id):
-    c.execute("""
-        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
-        FROM books
-        WHERE id=?
-    """, (book_id,))
+    c.execute("SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads FROM books WHERE id=?", (book_id,))
     return c.fetchone()
 
 def delete_book(book_id):
     c.execute("DELETE FROM books WHERE id=?", (book_id,))
+    db.commit()
+    return True
+
+def update_book(book_id, title, author, description, genre, cover_file_id, file_id, file_name, file_size):
+    c.execute("""
+        UPDATE books SET title=?, author=?, description=?, genre=?, cover_file_id=?, file_id=?, file_name=?, file_size=?
+        WHERE id=?
+    """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, book_id))
     db.commit()
     return True
 
@@ -148,33 +173,75 @@ def search_books(query):
     """, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
     return c.fetchall()
 
-def get_books_by_genre(genre):
+# ========================================
+# ===== توابع مانگا =====
+# ========================================
+def add_manga(title, author, description, genre, cover_file_id, file_id, file_name="", file_size=0):
+    now = datetime.now().isoformat()
     c.execute("""
-        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
-        FROM books
-        WHERE genre = ?
-        ORDER BY created_at DESC
-    """, (genre,))
+        INSERT INTO manga (title, author, description, genre, cover_file_id, file_id, file_name, file_size, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, now))
+    db.commit()
+    return c.lastrowid
+
+def get_all_manga():
+    c.execute("SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads FROM manga ORDER BY created_at DESC")
     return c.fetchall()
 
-def get_book_count():
-    c.execute("SELECT COUNT(*) FROM books")
-    return c.fetchone()[0]
+def get_manga(manga_id):
+    c.execute("SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads FROM manga WHERE id=?", (manga_id,))
+    return c.fetchone()
 
-def get_total_downloads():
-    c.execute("SELECT SUM(downloads) FROM books")
-    result = c.fetchone()[0]
-    return result if result else 0
+def delete_manga(manga_id):
+    c.execute("DELETE FROM manga WHERE id=?", (manga_id,))
+    db.commit()
+    return True
 
-def get_popular_books(limit=5):
+def update_manga(manga_id, title, author, description, genre, cover_file_id, file_id, file_name, file_size):
     c.execute("""
-        SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads
-        FROM books
-        ORDER BY downloads DESC
-        LIMIT ?
-    """, (limit,))
+        UPDATE manga SET title=?, author=?, description=?, genre=?, cover_file_id=?, file_id=?, file_name=?, file_size=?
+        WHERE id=?
+    """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, manga_id))
+    db.commit()
+    return True
+
+# ========================================
+# ===== توابع مانهوا =====
+# ========================================
+def add_manhwa(title, author, description, genre, cover_file_id, file_id, file_name="", file_size=0):
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT INTO manhwa (title, author, description, genre, cover_file_id, file_id, file_name, file_size, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, now))
+    db.commit()
+    return c.lastrowid
+
+def get_all_manhwa():
+    c.execute("SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads FROM manhwa ORDER BY created_at DESC")
     return c.fetchall()
 
+def get_manhwa(manhwa_id):
+    c.execute("SELECT id, title, author, description, genre, cover_file_id, file_id, file_name, downloads FROM manhwa WHERE id=?", (manhwa_id,))
+    return c.fetchone()
+
+def delete_manhwa(manhwa_id):
+    c.execute("DELETE FROM manhwa WHERE id=?", (manhwa_id,))
+    db.commit()
+    return True
+
+def update_manhwa(manhwa_id, title, author, description, genre, cover_file_id, file_id, file_name, file_size):
+    c.execute("""
+        UPDATE manhwa SET title=?, author=?, description=?, genre=?, cover_file_id=?, file_id=?, file_name=?, file_size=?
+        WHERE id=?
+    """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, manhwa_id))
+    db.commit()
+    return True
+
+# ========================================
+# ===== توابع کانال‌ها =====
+# ========================================
 def add_channel(username):
     c.execute("INSERT OR IGNORE INTO channels VALUES (?)", (username,))
     db.commit()
@@ -189,10 +256,9 @@ def delete_channel(username):
     db.commit()
     return True
 
-def get_channels_count():
-    c.execute("SELECT COUNT(*) FROM channels")
-    return c.fetchone()[0]
-
+# ========================================
+# ===== توابع بنر =====
+# ========================================
 def set_banner(banner_type, file_id=None, text=""):
     c.execute("DELETE FROM banner")
     c.execute("INSERT INTO banner VALUES (?,?,?)", (banner_type, file_id, text))
@@ -211,6 +277,9 @@ def delete_banner():
     db.commit()
     return True
 
+# ========================================
+# ===== توابع کاربران =====
+# ========================================
 def add_user(user_id, username="", full_name=""):
     now = datetime.now().isoformat()
     c.execute("""
@@ -228,10 +297,9 @@ def get_user_count():
     c.execute("SELECT COUNT(*) FROM users")
     return c.fetchone()[0]
 
-def get_user(user_id):
-    c.execute("SELECT user_id, username, full_name, join_date FROM users WHERE user_id=?", (user_id,))
-    return c.fetchone()
-
+# ========================================
+# ===== توابع رمز فایل =====
+# ========================================
 def add_password_file(name, password, file_id, file_type="document", caption=""):
     now = datetime.now().isoformat()
     c.execute("""
@@ -253,30 +321,9 @@ def delete_password_file(file_id):
     c.execute("DELETE FROM password_files WHERE id=?", (file_id,))
     db.commit()
 
-def add_admin_activity(admin_id, action, details=""):
-    now = datetime.now().isoformat()
-    c.execute("""
-        INSERT INTO admin_activities (admin_id, action, details, created_at)
-        VALUES (?, ?, ?, ?)
-    """, (admin_id, action, details, now))
-    db.commit()
-
-def get_admin_activities(admin_id=None, limit=20):
-    if admin_id:
-        c.execute("""
-            SELECT id, action, details, created_at FROM admin_activities
-            WHERE admin_id = ?
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (admin_id, limit))
-    else:
-        c.execute("""
-            SELECT id, admin_id, action, details, created_at FROM admin_activities
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (limit,))
-    return c.fetchall()
-
+# ========================================
+# ===== توابع نظرات =====
+# ========================================
 def add_feedback(user_id, message):
     now = datetime.now().isoformat()
     c.execute("INSERT INTO feedback (user_id, message, date) VALUES (?,?,?)", (user_id, message, now))
@@ -286,6 +333,9 @@ def get_all_feedback():
     c.execute("SELECT id, user_id, message, date FROM feedback ORDER BY date DESC")
     return c.fetchall()
 
+# ========================================
+# ===== توابع امتیاز =====
+# ========================================
 def add_robot_rating(user_id, rating):
     now = datetime.now().isoformat()
     c.execute("INSERT OR REPLACE INTO robot_ratings VALUES (?,?,?)", (user_id, rating, now))
@@ -299,6 +349,9 @@ def get_robot_ratings():
         return {"avg": round(avg, 1), "count": len(ratings)}
     return {"avg": 0, "count": 0}
 
+# ========================================
+# ===== توابع بروزرسانی =====
+# ========================================
 def add_update(title, content):
     now = datetime.now().isoformat()
     c.execute("INSERT INTO updates (title, content, date) VALUES (?,?,?)", (title, content, now))
@@ -308,6 +361,9 @@ def get_all_updates():
     c.execute("SELECT id, title, content, date FROM updates ORDER BY date DESC")
     return c.fetchall()
 
+# ========================================
+# ===== توابع تنظیمات =====
+# ========================================
 def set_setting(key, value):
     c.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, value))
     db.commit()
@@ -317,6 +373,9 @@ def get_setting(key):
     row = c.fetchone()
     return row[0] if row else None
 
+# ========================================
+# ===== توابع کمکی =====
+# ========================================
 def backup_db():
     import shutil
     if os.path.exists(DB_PATH):
@@ -333,25 +392,17 @@ def restore_db():
 
 def clear_all_data():
     c.execute("DELETE FROM books")
+    c.execute("DELETE FROM manga")
+    c.execute("DELETE FROM manhwa")
     c.execute("DELETE FROM channels")
     c.execute("DELETE FROM banner")
     c.execute("DELETE FROM users")
     c.execute("DELETE FROM password_files")
-    c.execute("DELETE FROM admin_activities")
     c.execute("DELETE FROM feedback")
     c.execute("DELETE FROM robot_ratings")
     c.execute("DELETE FROM updates")
     c.execute("DELETE FROM settings")
     db.commit()
     return True
-
-def get_db_stats():
-    return {
-        "books": get_book_count(),
-        "channels": get_channels_count(),
-        "users": get_user_count(),
-        "total_downloads": get_total_downloads(),
-        "password_files": len(get_all_password_files())
-    }
 
 print("✅ تمام توابع دیتابیس بارگذاری شدند!")
