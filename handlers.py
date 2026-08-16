@@ -6,13 +6,11 @@ from database import *
 import json
 
 router = Router()
+user_states = {}  # ← اینجا تعریف شد!
 
-# ========================================
 # ========================================
 # ===== کیبورد منوی کاربر (ساده) =====
 # ========================================
-# ========================================
-
 def user_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -24,11 +22,8 @@ def user_menu_keyboard():
     )
 
 # ========================================
-# ========================================
 # ===== کیبورد عضویت =====
 # ========================================
-# ========================================
-
 def join_keyboard():
     channels = get_channels()
     buttons = []
@@ -38,11 +33,8 @@ def join_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # ========================================
-# ========================================
 # ===== ارسال بنر =====
 # ========================================
-# ========================================
-
 async def send_banner(message):
     banner = get_banner()
     if banner["type"] == "photo" and banner["file_id"]:
@@ -55,11 +47,8 @@ async def send_banner(message):
         await message.answer(banner["text"])
 
 # ========================================
-# ========================================
 # ===== ارسال کتاب =====
 # ========================================
-# ========================================
-
 async def send_book(message, book_id):
     book = get_book(book_id)
     if not book:
@@ -101,11 +90,8 @@ async def download_book(call: types.CallbackQuery):
     await call.answer("✅ دانلود شروع شد!")
 
 # ========================================
-# ========================================
 # ===== ارسال مانگا =====
 # ========================================
-# ========================================
-
 async def send_manga(message, manga_id):
     manga = get_manga(manga_id)
     if not manga:
@@ -147,11 +133,8 @@ async def download_manga(call: types.CallbackQuery):
     await call.answer("✅ دانلود شروع شد!")
 
 # ========================================
-# ========================================
 # ===== ارسال مانهوا =====
 # ========================================
-# ========================================
-
 async def send_manhwa(message, manhwa_id):
     manhwa = get_manhwa(manhwa_id)
     if not manhwa:
@@ -194,11 +177,12 @@ async def download_manhwa(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# ===== دریافت فایل با رمز =====
+# ===== دریافت فایل با رمز (اصلاح شده) =====
 # ========================================
 # ========================================
 
-@router.message(lambda m: m.text and not m.text.startswith("/"))
+# ===== این هندلر فقط وقتی فعال میشه که کاربر توی حالت رمز باشه =====
+@router.message(lambda m: m.text and not m.text.startswith("/") and user_states.get(m.from_user.id, {}).get("state") == "waiting_password")
 async def handle_password_file(message: types.Message):
     file_info = get_password_file_by_code(message.text.strip())
     if file_info:
@@ -209,6 +193,9 @@ async def handle_password_file(message: types.Message):
             await message.answer_video(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
         else:
             await message.answer_document(file_id, caption=f"🔐 {name}\n\n{caption or ''}")
+        user_states[message.from_user.id] = {}
+    else:
+        await message.answer("❌ رمز اشتباه است! دوباره امتحان کن.")
 
 # ========================================
 # ========================================
