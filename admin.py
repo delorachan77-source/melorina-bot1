@@ -5,7 +5,16 @@ from config import ADMIN_ID, GEMINI_API_KEY
 from database import *
 from utils.cleaner import clean_pdf, clean_image, get_file_type
 from utils.typist import type_persian_text, get_available_fonts
-from utils.ai_helper import call_gemini, translate_text, summarize_text, analyze_book, extract_text_from_file
+from utils.ai_helper import (
+    call_gemini,
+    translate_text,
+    translate_file_content,
+    summarize_text,
+    analyze_book,
+    extract_text_from_file,
+    type_persian_text as ai_type_text,
+    clean_file_content
+)
 import asyncio
 import aiohttp
 import json
@@ -16,14 +25,18 @@ router = Router()
 user_states = {}
 
 # ========================================
+# ========================================
 # ===== کیبورد اصلی پنل ادمین =====
 # ========================================
+# ========================================
+
 def get_admin_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📚 مدیریت کتاب‌ها")],
             [KeyboardButton(text="📖 مدیریت مانگا")],
             [KeyboardButton(text="🎨 مدیریت مانهوا")],
+            [KeyboardButton(text="📱 مدیریت معرفی مانهوا")],
             [KeyboardButton(text="📢 مدیریت کانال‌ها")],
             [KeyboardButton(text="🎨 مدیریت بنر")],
             [KeyboardButton(text="👀 دیدن بنر")],
@@ -35,7 +48,7 @@ def get_admin_keyboard():
             [KeyboardButton(text="📝 نظرات و پیشنهادات")],
             [KeyboardButton(text="📋 بروزرسانی‌ها")],
             [KeyboardButton(text="📢 تبلیغات")],
-            [KeyboardButton(text="📱 فیلترشکن")],
+            [KeyboardButton(text="📱 مدیریت فیلترشکن")],
             [KeyboardButton(text="💾 بکاپ و بازیابی")],
             [KeyboardButton(text="🔙 بستن پنل")]
         ],
@@ -43,8 +56,11 @@ def get_admin_keyboard():
     )
 
 # ========================================
+# ========================================
 # ===== پنل اصلی =====
 # ========================================
+# ========================================
+
 @router.message(Command("panel"))
 async def panel(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -56,17 +72,21 @@ async def panel(message: types.Message):
     )
 
 # ========================================
+# ========================================
 # ===== بستن پنل =====
 # ========================================
+# ========================================
+
 @router.message(lambda m: m.text == "🔙 بستن پنل" and m.from_user.id == ADMIN_ID)
 async def close_panel(message: types.Message):
     await message.answer("✅ پنل بسته شد!", reply_markup=types.ReplyKeyboardRemove())
 
 # ========================================
 # ========================================
-# 👀 پنل عضویت
+# ===== 👀 پنل عضویت =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "👀 پنل عضویت" and m.from_user.id == ADMIN_ID)
 async def view_join_panel(message: types.Message):
     channels = get_channels()
@@ -90,9 +110,10 @@ async def check_mem_inline(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 📚 مدیریت کتاب‌ها (با ویرایش و جستجو)
+# ===== 📚 مدیریت کتاب‌ها =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "📚 مدیریت کتاب‌ها" and m.from_user.id == ADMIN_ID)
 async def manage_books(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -100,12 +121,10 @@ async def manage_books(message: types.Message):
         [InlineKeyboardButton(text="📋 لیست کتاب‌ها", callback_data="list_books")],
         [InlineKeyboardButton(text="🗑 حذف کتاب", callback_data="delete_book")],
         [InlineKeyboardButton(text="✏️ ویرایش کتاب", callback_data="edit_book")],
-        [InlineKeyboardButton(text="🔍 جستجوی کتاب", callback_data="search_book")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
     ])
     await message.answer("📚 **مدیریت کتاب‌ها**", reply_markup=keyboard)
 
-# ===== افزودن کتاب =====
 @router.callback_query(lambda c: c.data == "add_book")
 async def add_book_start(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
@@ -117,7 +136,7 @@ async def add_book_start(call: types.CallbackQuery):
 async def get_book_title(message: types.Message):
     user_states[message.from_user.id]["title"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_book_author"
-    await message.answer("✍️ **نویسنده کتاب رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("✍️ **نویسنده رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_book_author")
 async def get_book_author(message: types.Message):
@@ -126,7 +145,7 @@ async def get_book_author(message: types.Message):
     else:
         user_states[message.from_user.id]["author"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_book_genre"
-    await message.answer("📂 **ژانر کتاب رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("📂 **ژانر رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_book_genre")
 async def get_book_genre(message: types.Message):
@@ -135,7 +154,7 @@ async def get_book_genre(message: types.Message):
     else:
         user_states[message.from_user.id]["genre"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_book_description"
-    await message.answer("📝 **توضیحات کتاب رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("📝 **توضیحات رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_book_description")
 async def get_book_description(message: types.Message):
@@ -144,19 +163,19 @@ async def get_book_description(message: types.Message):
     else:
         user_states[message.from_user.id]["description"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_book_cover"
-    await message.answer("🖼 **جلد کتاب رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("🖼 **جلد رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_book_cover")
 async def get_book_cover(message: types.Message):
     if message.text == "/skip":
         user_states[message.from_user.id]["cover"] = ""
         user_states[message.from_user.id]["state"] = "waiting_book_file"
-        await message.answer("📄 **حالا فایل کتاب رو بفرست:**")
+        await message.answer("📄 **فایل کتاب رو بفرست:**")
         return
     if message.photo:
         user_states[message.from_user.id]["cover"] = message.photo[-1].file_id
         user_states[message.from_user.id]["state"] = "waiting_book_file"
-        await message.answer("📄 **حالا فایل کتاب رو بفرست:**")
+        await message.answer("📄 **فایل کتاب رو بفرست:**")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and m.document and user_states.get(m.from_user.id, {}).get("state") == "waiting_book_file")
 async def save_book(message: types.Message):
@@ -174,7 +193,6 @@ async def save_book(message: types.Message):
     user_states[message.from_user.id] = {}
     await message.answer(f"✅ **کتاب «{data.get('title')}» اضافه شد!**")
 
-# ===== لیست کتاب‌ها =====
 @router.callback_query(lambda c: c.data == "list_books")
 async def list_books(call: types.CallbackQuery):
     books = get_all_books()
@@ -188,7 +206,6 @@ async def list_books(call: types.CallbackQuery):
         text += f"\n... و {len(books) - 10} کتاب دیگه"
     await call.message.edit_text(text)
 
-# ===== حذف کتاب =====
 @router.callback_query(lambda c: c.data == "delete_book")
 async def delete_book_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_delete_book"}
@@ -208,7 +225,6 @@ async def delete_book_confirm(message: types.Message):
         await message.answer("❌ لطفاً یک عدد معتبر بفرست!")
     user_states[message.from_user.id] = {}
 
-# ===== ویرایش کتاب =====
 @router.callback_query(lambda c: c.data == "edit_book")
 async def edit_book_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_edit_book"}
@@ -223,7 +239,6 @@ async def edit_book_confirm(message: types.Message):
             user_states[message.from_user.id] = {"state": "edit_book_data", "book_id": book_id}
             await message.answer(
                 f"📝 **ویرایش کتاب «{book[1]}»**\n\n"
-                f"برای ویرایش، اطلاعات جدید رو به ترتیب بفرست:\n"
                 f"`عنوان|نویسنده|ژانر|توضیحات`"
             )
         else:
@@ -238,7 +253,6 @@ async def edit_book_save(message: types.Message):
     if len(parts) < 4:
         await message.answer("❌ فرمت اشتباه! مثال: `عنوان|نویسنده|ژانر|توضیحات`")
         return
-    
     update_book(
         book_id=book_id,
         title=parts[0].strip(),
@@ -253,30 +267,12 @@ async def edit_book_save(message: types.Message):
     user_states[message.from_user.id] = {}
     await message.answer(f"✅ **کتاب ویرایش شد!**")
 
-# ===== جستجوی کتاب =====
-@router.callback_query(lambda c: c.data == "search_book")
-async def search_book_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {"state": "waiting_search_book"}
-    await call.message.edit_text("🔍 **عبارت جستجو رو بفرست:**")
+# ========================================
+# ========================================
+# ===== 📖 مدیریت مانگا =====
+# ========================================
+# ========================================
 
-@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_search_book")
-async def search_book_confirm(message: types.Message):
-    query = message.text
-    results = search_books(query)
-    if not results:
-        await message.answer(f"❌ نتیجه‌ای برای «{query}» پیدا نشد!")
-        return
-    text = f"🔍 **نتایج جستجو:**\n\n"
-    for book in results[:5]:
-        text += f"• `{book[0]}` - {book[1]}\n"
-    await message.answer(text)
-    user_states[message.from_user.id] = {}
-
-# ========================================
-# ========================================
-# 📖 مدیریت مانگا (با ویرایش و جستجو)
-# ========================================
-# ========================================
 @router.message(lambda m: m.text == "📖 مدیریت مانگا" and m.from_user.id == ADMIN_ID)
 async def manage_manga(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -284,12 +280,10 @@ async def manage_manga(message: types.Message):
         [InlineKeyboardButton(text="📋 لیست مانگا", callback_data="list_manga")],
         [InlineKeyboardButton(text="🗑 حذف مانگا", callback_data="delete_manga")],
         [InlineKeyboardButton(text="✏️ ویرایش مانگا", callback_data="edit_manga")],
-        [InlineKeyboardButton(text="🔍 جستجوی مانگا", callback_data="search_manga")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
     ])
     await message.answer("📖 **مدیریت مانگا**", reply_markup=keyboard)
 
-# ===== افزودن مانگا =====
 @router.callback_query(lambda c: c.data == "add_manga")
 async def add_manga_start(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
@@ -301,7 +295,7 @@ async def add_manga_start(call: types.CallbackQuery):
 async def get_manga_title(message: types.Message):
     user_states[message.from_user.id]["title"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manga_author"
-    await message.answer("✍️ **نویسنده مانگا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("✍️ **نویسنده رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manga_author")
 async def get_manga_author(message: types.Message):
@@ -310,7 +304,7 @@ async def get_manga_author(message: types.Message):
     else:
         user_states[message.from_user.id]["author"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manga_genre"
-    await message.answer("📂 **ژانر مانگا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("📂 **ژانر رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manga_genre")
 async def get_manga_genre(message: types.Message):
@@ -319,7 +313,7 @@ async def get_manga_genre(message: types.Message):
     else:
         user_states[message.from_user.id]["genre"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manga_description"
-    await message.answer("📝 **توضیحات مانگا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("📝 **توضیحات رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manga_description")
 async def get_manga_description(message: types.Message):
@@ -328,19 +322,19 @@ async def get_manga_description(message: types.Message):
     else:
         user_states[message.from_user.id]["description"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manga_cover"
-    await message.answer("🖼 **جلد مانگا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("🖼 **جلد رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manga_cover")
 async def get_manga_cover(message: types.Message):
     if message.text == "/skip":
         user_states[message.from_user.id]["cover"] = ""
         user_states[message.from_user.id]["state"] = "waiting_manga_file"
-        await message.answer("📄 **حالا فایل مانگا رو بفرست:**")
+        await message.answer("📄 **فایل مانگا رو بفرست:**")
         return
     if message.photo:
         user_states[message.from_user.id]["cover"] = message.photo[-1].file_id
         user_states[message.from_user.id]["state"] = "waiting_manga_file"
-        await message.answer("📄 **حالا فایل مانگا رو بفرست:**")
+        await message.answer("📄 **فایل مانگا رو بفرست:**")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and m.document and user_states.get(m.from_user.id, {}).get("state") == "waiting_manga_file")
 async def save_manga(message: types.Message):
@@ -358,7 +352,6 @@ async def save_manga(message: types.Message):
     user_states[message.from_user.id] = {}
     await message.answer(f"✅ **مانگا «{data.get('title')}» اضافه شد!**")
 
-# ===== لیست مانگا =====
 @router.callback_query(lambda c: c.data == "list_manga")
 async def list_manga(call: types.CallbackQuery):
     manga_list = get_all_manga()
@@ -372,7 +365,6 @@ async def list_manga(call: types.CallbackQuery):
         text += f"\n... و {len(manga_list) - 10} مانگا دیگه"
     await call.message.edit_text(text)
 
-# ===== حذف مانگا =====
 @router.callback_query(lambda c: c.data == "delete_manga")
 async def delete_manga_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_delete_manga"}
@@ -392,7 +384,6 @@ async def delete_manga_confirm(message: types.Message):
         await message.answer("❌ لطفاً یک عدد معتبر بفرست!")
     user_states[message.from_user.id] = {}
 
-# ===== ویرایش مانگا =====
 @router.callback_query(lambda c: c.data == "edit_manga")
 async def edit_manga_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_edit_manga"}
@@ -405,11 +396,7 @@ async def edit_manga_confirm(message: types.Message):
         manga = get_manga(manga_id)
         if manga:
             user_states[message.from_user.id] = {"state": "edit_manga_data", "manga_id": manga_id}
-            await message.answer(
-                f"📝 **ویرایش مانگا «{manga[1]}»**\n\n"
-                f"برای ویرایش، اطلاعات جدید رو به ترتیب بفرست:\n"
-                f"`عنوان|نویسنده|ژانر|توضیحات`"
-            )
+            await message.answer(f"📝 **ویرایش مانگا «{manga[1]}»**\n\n`عنوان|نویسنده|ژانر|توضیحات`")
         else:
             await message.answer("❌ مانگا پیدا نشد!")
     except:
@@ -422,7 +409,6 @@ async def edit_manga_save(message: types.Message):
     if len(parts) < 4:
         await message.answer("❌ فرمت اشتباه! مثال: `عنوان|نویسنده|ژانر|توضیحات`")
         return
-    
     update_manga(
         manga_id=manga_id,
         title=parts[0].strip(),
@@ -437,30 +423,12 @@ async def edit_manga_save(message: types.Message):
     user_states[message.from_user.id] = {}
     await message.answer(f"✅ **مانگا ویرایش شد!**")
 
-# ===== جستجوی مانگا =====
-@router.callback_query(lambda c: c.data == "search_manga")
-async def search_manga_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {"state": "waiting_search_manga"}
-    await call.message.edit_text("🔍 **عبارت جستجو رو بفرست:**")
+# ========================================
+# ========================================
+# ===== 🎨 مدیریت مانهوا =====
+# ========================================
+# ========================================
 
-@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_search_manga")
-async def search_manga_confirm(message: types.Message):
-    query = message.text
-    results = search_manga(query)
-    if not results:
-        await message.answer(f"❌ نتیجه‌ای برای «{query}» پیدا نشد!")
-        return
-    text = f"🔍 **نتایج جستجو:**\n\n"
-    for manga in results[:5]:
-        text += f"• `{manga[0]}` - {manga[1]}\n"
-    await message.answer(text)
-    user_states[message.from_user.id] = {}
-
-# ========================================
-# ========================================
-# 🎨 مدیریت مانهوا (با ویرایش و جستجو)
-# ========================================
-# ========================================
 @router.message(lambda m: m.text == "🎨 مدیریت مانهوا" and m.from_user.id == ADMIN_ID)
 async def manage_manhwa(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -468,12 +436,10 @@ async def manage_manhwa(message: types.Message):
         [InlineKeyboardButton(text="📋 لیست مانهوا", callback_data="list_manhwa")],
         [InlineKeyboardButton(text="🗑 حذف مانهوا", callback_data="delete_manhwa")],
         [InlineKeyboardButton(text="✏️ ویرایش مانهوا", callback_data="edit_manhwa")],
-        [InlineKeyboardButton(text="🔍 جستجوی مانهوا", callback_data="search_manhwa")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
     ])
     await message.answer("🎨 **مدیریت مانهوا**", reply_markup=keyboard)
 
-# ===== افزودن مانهوا =====
 @router.callback_query(lambda c: c.data == "add_manhwa")
 async def add_manhwa_start(call: types.CallbackQuery):
     if call.from_user.id != ADMIN_ID:
@@ -485,7 +451,7 @@ async def add_manhwa_start(call: types.CallbackQuery):
 async def get_manhwa_title(message: types.Message):
     user_states[message.from_user.id]["title"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manhwa_author"
-    await message.answer("✍️ **نویسنده مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("✍️ **نویسنده رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manhwa_author")
 async def get_manhwa_author(message: types.Message):
@@ -494,7 +460,7 @@ async def get_manhwa_author(message: types.Message):
     else:
         user_states[message.from_user.id]["author"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manhwa_genre"
-    await message.answer("📂 **ژانر مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("📂 **ژانر رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manhwa_genre")
 async def get_manhwa_genre(message: types.Message):
@@ -503,7 +469,7 @@ async def get_manhwa_genre(message: types.Message):
     else:
         user_states[message.from_user.id]["genre"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manhwa_description"
-    await message.answer("📝 **توضیحات مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("📝 **توضیحات رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manhwa_description")
 async def get_manhwa_description(message: types.Message):
@@ -512,19 +478,19 @@ async def get_manhwa_description(message: types.Message):
     else:
         user_states[message.from_user.id]["description"] = message.text
     user_states[message.from_user.id]["state"] = "waiting_manhwa_cover"
-    await message.answer("🖼 **جلد مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+    await message.answer("🖼 **جلد رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_manhwa_cover")
 async def get_manhwa_cover(message: types.Message):
     if message.text == "/skip":
         user_states[message.from_user.id]["cover"] = ""
         user_states[message.from_user.id]["state"] = "waiting_manhwa_file"
-        await message.answer("📄 **حالا فایل مانهوا رو بفرست:**")
+        await message.answer("📄 **فایل مانهوا رو بفرست:**")
         return
     if message.photo:
         user_states[message.from_user.id]["cover"] = message.photo[-1].file_id
         user_states[message.from_user.id]["state"] = "waiting_manhwa_file"
-        await message.answer("📄 **حالا فایل مانهوا رو بفرست:**")
+        await message.answer("📄 **فایل مانهوا رو بفرست:**")
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and m.document and user_states.get(m.from_user.id, {}).get("state") == "waiting_manhwa_file")
 async def save_manhwa(message: types.Message):
@@ -542,7 +508,6 @@ async def save_manhwa(message: types.Message):
     user_states[message.from_user.id] = {}
     await message.answer(f"✅ **مانهوا «{data.get('title')}» اضافه شد!**")
 
-# ===== لیست مانهوا =====
 @router.callback_query(lambda c: c.data == "list_manhwa")
 async def list_manhwa(call: types.CallbackQuery):
     manhwa_list = get_all_manhwa()
@@ -556,7 +521,6 @@ async def list_manhwa(call: types.CallbackQuery):
         text += f"\n... و {len(manhwa_list) - 10} مانهوا دیگه"
     await call.message.edit_text(text)
 
-# ===== حذف مانهوا =====
 @router.callback_query(lambda c: c.data == "delete_manhwa")
 async def delete_manhwa_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_delete_manhwa"}
@@ -576,7 +540,6 @@ async def delete_manhwa_confirm(message: types.Message):
         await message.answer("❌ لطفاً یک عدد معتبر بفرست!")
     user_states[message.from_user.id] = {}
 
-# ===== ویرایش مانهوا =====
 @router.callback_query(lambda c: c.data == "edit_manhwa")
 async def edit_manhwa_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_edit_manhwa"}
@@ -589,11 +552,7 @@ async def edit_manhwa_confirm(message: types.Message):
         manhwa = get_manhwa(manhwa_id)
         if manhwa:
             user_states[message.from_user.id] = {"state": "edit_manhwa_data", "manhwa_id": manhwa_id}
-            await message.answer(
-                f"📝 **ویرایش مانهوا «{manhwa[1]}»**\n\n"
-                f"برای ویرایش، اطلاعات جدید رو به ترتیب بفرست:\n"
-                f"`عنوان|نویسنده|ژانر|توضیحات`"
-            )
+            await message.answer(f"📝 **ویرایش مانهوا «{manhwa[1]}»**\n\n`عنوان|نویسنده|ژانر|توضیحات`")
         else:
             await message.answer("❌ مانهوا پیدا نشد!")
     except:
@@ -606,7 +565,6 @@ async def edit_manhwa_save(message: types.Message):
     if len(parts) < 4:
         await message.answer("❌ فرمت اشتباه! مثال: `عنوان|نویسنده|ژانر|توضیحات`")
         return
-    
     update_manhwa(
         manhwa_id=manhwa_id,
         title=parts[0].strip(),
@@ -621,30 +579,184 @@ async def edit_manhwa_save(message: types.Message):
     user_states[message.from_user.id] = {}
     await message.answer(f"✅ **مانهوا ویرایش شد!**")
 
-# ===== جستجوی مانهوا =====
-@router.callback_query(lambda c: c.data == "search_manhwa")
-async def search_manhwa_start(call: types.CallbackQuery):
-    user_states[call.from_user.id] = {"state": "waiting_search_manhwa"}
-    await call.message.edit_text("🔍 **عبارت جستجو رو بفرست:**")
+# ========================================
+# ========================================
+# ===== 📱 مدیریت معرفی مانهوا (جدید) =====
+# ========================================
+# ========================================
 
-@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_search_manhwa")
-async def search_manhwa_confirm(message: types.Message):
-    query = message.text
-    results = search_manhwa(query)
-    if not results:
-        await message.answer(f"❌ نتیجه‌ای برای «{query}» پیدا نشد!")
+@router.message(lambda m: m.text == "📱 مدیریت معرفی مانهوا" and m.from_user.id == ADMIN_ID)
+async def manage_manhwa_intro(message: types.Message):
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ افزودن معرفی", callback_data="add_intro")],
+        [InlineKeyboardButton(text="📋 لیست معرفی‌ها", callback_data="list_intro")],
+        [InlineKeyboardButton(text="🗑 حذف معرفی", callback_data="delete_intro")],
+        [InlineKeyboardButton(text="✏️ ویرایش معرفی", callback_data="edit_intro")],
+        [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
+    ])
+    await message.answer("📱 **مدیریت معرفی مانهوا**", reply_markup=keyboard)
+
+# ===== افزودن معرفی =====
+@router.callback_query(lambda c: c.data == "add_intro")
+async def add_intro_start(call: types.CallbackQuery):
+    if call.from_user.id != ADMIN_ID:
         return
-    text = f"🔍 **نتایج جستجو:**\n\n"
-    for manhwa in results[:5]:
-        text += f"• `{manhwa[0]}` - {manhwa[1]}\n"
-    await message.answer(text)
+    user_states[call.from_user.id] = {"state": "waiting_intro_title"}
+    await call.message.edit_text("📝 **عنوان مانهوا رو بفرست:**")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_intro_title")
+async def get_intro_title(message: types.Message):
+    user_states[message.from_user.id]["title"] = message.text
+    user_states[message.from_user.id]["state"] = "waiting_intro_genre"
+    await message.answer("📂 **ژانر مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_intro_genre")
+async def get_intro_genre(message: types.Message):
+    if message.text == "/skip":
+        user_states[message.from_user.id]["genre"] = ""
+    else:
+        user_states[message.from_user.id]["genre"] = message.text
+    user_states[message.from_user.id]["state"] = "waiting_intro_description"
+    await message.answer("📝 **توضیحات مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_intro_description")
+async def get_intro_description(message: types.Message):
+    if message.text == "/skip":
+        user_states[message.from_user.id]["description"] = ""
+    else:
+        user_states[message.from_user.id]["description"] = message.text
+    user_states[message.from_user.id]["state"] = "waiting_intro_cover"
+    await message.answer("🖼 **عکس جلد مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_intro_cover")
+async def get_intro_cover(message: types.Message):
+    if message.text == "/skip":
+        user_states[message.from_user.id]["cover"] = ""
+        user_states[message.from_user.id]["state"] = "waiting_intro_link"
+        await message.answer("🔗 **لینک مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+        return
+    if message.photo:
+        user_states[message.from_user.id]["cover"] = message.photo[-1].file_id
+        user_states[message.from_user.id]["state"] = "waiting_intro_link"
+        await message.answer("🔗 **لینک مانهوا رو بفرست (اختیاری):**\n(برای رد شدن /skip بفرست)")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_intro_link")
+async def get_intro_link(message: types.Message):
+    if message.text == "/skip":
+        user_states[message.from_user.id]["link"] = ""
+    else:
+        user_states[message.from_user.id]["link"] = message.text
+    
+    data = user_states[message.from_user.id]
+    add_manhwa_intro(
+        title=data.get("title"),
+        description=data.get("description", ""),
+        genre=data.get("genre", ""),
+        cover_file_id=data.get("cover", ""),
+        link=data.get("link", "")
+    )
     user_states[message.from_user.id] = {}
+    await message.answer(f"✅ **معرفی «{data.get('title')}» اضافه شد!**")
+
+# ===== لیست معرفی‌ها =====
+@router.callback_query(lambda c: c.data == "list_intro")
+async def list_intro(call: types.CallbackQuery):
+    intro_list = get_all_manhwa_intro()
+    if not intro_list:
+        await call.message.edit_text("❌ هیچ معرفی‌ای وجود نداره!")
+        return
+    text = "📱 **لیست معرفی مانهواها:**\n\n"
+    for intro in intro_list:
+        text += f"• `{intro[0]}` - {intro[1]} ({intro[3] or 'بدون ژانر'})\n"
+    await call.message.edit_text(text)
+
+# ===== حذف معرفی =====
+@router.callback_query(lambda c: c.data == "delete_intro")
+async def delete_intro_start(call: types.CallbackQuery):
+    intro_list = get_all_manhwa_intro()
+    if not intro_list:
+        await call.message.edit_text("❌ هیچ معرفی‌ای وجود نداره!")
+        return
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🗑 {intro[1]}", callback_data=f"del_intro_{intro[0]}")] for intro in intro_list[:5]
+    ] + [[InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]])
+    
+    await call.message.edit_text("🗑 **معرفی رو برای حذف انتخاب کن:**", reply_markup=keyboard)
+
+@router.callback_query(lambda c: c.data.startswith("del_intro_"))
+async def delete_intro_confirm(call: types.CallbackQuery):
+    intro_id = int(call.data.replace("del_intro_", ""))
+    intro = get_manhwa_intro(intro_id)
+    if intro:
+        delete_manhwa_intro(intro_id)
+        await call.message.edit_text(f"✅ معرفی «{intro[1]}» حذف شد!")
+    else:
+        await call.message.edit_text("❌ معرفی پیدا نشد!")
+
+# ===== ویرایش معرفی =====
+@router.callback_query(lambda c: c.data == "edit_intro")
+async def edit_intro_start(call: types.CallbackQuery):
+    intro_list = get_all_manhwa_intro()
+    if not intro_list:
+        await call.message.edit_text("❌ هیچ معرفی‌ای وجود نداره!")
+        return
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"✏️ {intro[1]}", callback_data=f"edit_intro_{intro[0]}")] for intro in intro_list[:5]
+    ] + [[InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]])
+    
+    await call.message.edit_text("✏️ **معرفی رو برای ویرایش انتخاب کن:**", reply_markup=keyboard)
+
+@router.callback_query(lambda c: c.data.startswith("edit_intro_"))
+async def edit_intro_confirm(call: types.CallbackQuery):
+    intro_id = int(call.data.replace("edit_intro_", ""))
+    intro = get_manhwa_intro(intro_id)
+    if not intro:
+        await call.message.edit_text("❌ معرفی پیدا نشد!")
+        return
+    
+    user_states[call.from_user.id] = {
+        "state": "waiting_edit_intro",
+        "intro_id": intro_id,
+        "intro": intro
+    }
+    
+    await call.message.edit_text(
+        f"📝 **ویرایش معرفی «{intro[1]}»**\n\n"
+        f"برای ویرایش، اطلاعات جدید رو به ترتیب بفرست:\n"
+        f"`عنوان|ژانر|توضیحات|لینک`\n\n"
+        f"مثال: `مانهوا جدید|رمان|توضیحات جدید|https://example.com`"
+    )
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_edit_intro")
+async def edit_intro_save(message: types.Message):
+    data = user_states[message.from_user.id]
+    intro_id = data.get("intro_id")
+    intro = data.get("intro")
+    
+    parts = message.text.split("|")
+    if len(parts) < 4:
+        await message.answer("❌ فرمت اشتباه! مثال: `عنوان|ژانر|توضیحات|لینک`")
+        return
+    
+    update_manhwa_intro(
+        intro_id=intro_id,
+        title=parts[0].strip(),
+        description=parts[2].strip(),
+        genre=parts[1].strip(),
+        cover_file_id=intro[4],
+        link=parts[3].strip()
+    )
+    user_states[message.from_user.id] = {}
+    await message.answer(f"✅ **معرفی «{parts[0].strip()}» ویرایش شد!**")
 
 # ========================================
 # ========================================
-# 📢 مدیریت کانال‌ها
+# ===== 📢 مدیریت کانال‌ها =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "📢 مدیریت کانال‌ها" and m.from_user.id == ADMIN_ID)
 async def manage_channels(message: types.Message):
     channels = get_channels()
@@ -684,9 +796,10 @@ async def remove_channel_confirm(message: types.Message):
 
 # ========================================
 # ========================================
-# 🎨 مدیریت بنر
+# ===== 🎨 مدیریت بنر (با فوروارد) =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "🎨 مدیریت بنر" and m.from_user.id == ADMIN_ID)
 async def manage_banner(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -700,7 +813,14 @@ async def manage_banner(message: types.Message):
 @router.callback_query(lambda c: c.data == "set_banner")
 async def set_banner_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_banner"}
-    await call.message.edit_text("📝 **بنر رو بفرست**\n\n• متن\n• عکس\n• ویدیو\n• فایل")
+    await call.message.edit_text(
+        "📝 **بنر رو بفرست**\n\n"
+        "• متن\n"
+        "• عکس\n"
+        "• ویدیو\n"
+        "• فایل\n"
+        "• فوروارد (هر چیزی که از کانال دیگه فوروارد کنی)"
+    )
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_banner")
 async def set_banner_confirm(message: types.Message):
@@ -720,10 +840,12 @@ async def set_banner_confirm(message: types.Message):
         await message.answer("❌ نوع فایل پشتیبانی نمیشه!")
         return
     user_states[message.from_user.id] = {}
+    add_admin_activity(message.from_user.id, "تنظیم بنر")
 
 @router.callback_query(lambda c: c.data == "delete_banner")
 async def delete_banner_confirm(call: types.CallbackQuery):
     delete_banner()
+    add_admin_activity(call.from_user.id, "حذف بنر")
     await call.message.edit_text("✅ بنر حذف شد!")
 
 @router.callback_query(lambda c: c.data == "view_banner")
@@ -740,9 +862,10 @@ async def view_banner(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 👥 مدیریت کاربران
+# ===== 👥 مدیریت کاربران =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "👥 مدیریت کاربران" and m.from_user.id == ADMIN_ID)
 async def manage_users(message: types.Message):
     users = get_all_users()
@@ -758,14 +881,16 @@ async def manage_users(message: types.Message):
 
 # ========================================
 # ========================================
-# 📊 آمار پیشرفته
+# ===== 📊 آمار پیشرفته =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "📊 آمار پیشرفته" and m.from_user.id == ADMIN_ID)
 async def advanced_stats(message: types.Message):
     books = get_all_books()
     manga_list = get_all_manga()
     manhwa_list = get_all_manhwa()
+    intro_list = get_all_manhwa_intro()
     channels = get_channels()
     users = get_user_count()
     
@@ -774,15 +899,17 @@ async def advanced_stats(message: types.Message):
         f"📁 **کتاب‌ها:** {len(books)} تا\n"
         f"📖 **مانگاها:** {len(manga_list)} تا\n"
         f"🎨 **مانهواها:** {len(manhwa_list)} تا\n"
+        f"📱 **معرفی مانهوا:** {len(intro_list)} تا\n"
         f"📢 **کانال‌ها:** {len(channels)} تا\n"
         f"👥 **کاربران:** {users} نفر"
     )
 
 # ========================================
 # ========================================
-# 🤖 هوش مصنوعی (با کلینر و تایپیست)
+# ===== 🤖 هوش مصنوعی =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "🤖 هوش مصنوعی" and m.from_user.id == ADMIN_ID)
 async def ai_panel(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -835,26 +962,53 @@ async def ai_translate_start(call: types.CallbackQuery):
     user_states[call.from_user.id] = {"state": "waiting_translate"}
     await call.message.edit_text(
         "🌍 **مترجم هوشمند**\n\n"
-        "متن رو بفرست تا به فارسی ترجمه کنم.\n"
-        "برای ترجمه انگلیسی، اول بنویس `/en`"
+        "• متن رو بفرست تا ترجمه کنم\n"
+        "• فایل PDF / عکس رو بفرست تا محتواش رو ترجمه کنم\n"
+        "• برای ترجمه انگلیسی، اول بنویس `/en`"
     )
 
 @router.message(lambda m: m.from_user.id == ADMIN_ID and user_states.get(m.from_user.id, {}).get("state") == "waiting_translate")
 async def ai_translate_process(message: types.Message):
-    text = message.text
     target = "fa"
+    text = ""
+    file_type = "text"
     
-    if text.startswith("/en"):
-        text = text.replace("/en", "").strip()
-        target = "en"
+    if message.text:
+        text = message.text
+        if text.startswith("/en"):
+            text = text.replace("/en", "").strip()
+            target = "en"
+    elif message.document:
+        file = await message.bot.get_file(message.document.file_id)
+        file_path = f"temp_{message.from_user.id}_{message.document.file_name}"
+        await message.bot.download_file(file.file_path, file_path)
+        
+        if file_path.endswith(".pdf"):
+            text = await extract_text_from_file(file_path)
+            file_type = "PDF"
+        else:
+            text = f"⚠️ این فایل {message.document.file_name} قابل پردازش نیست."
+        os.remove(file_path)
+    elif message.photo:
+        await message.answer("🔄 در حال تشخیص متن از عکس...")
+        text = "⚠️ تشخیص متن از عکس در حال توسعه است..."
+        file_type = "عکس"
+    else:
+        await message.answer("❌ لطفاً متن یا فایل بفرست!")
+        return
+    
+    if not text or text.startswith("⚠️"):
+        await message.answer(text or "❌ متنی برای ترجمه پیدا نشد!")
+        user_states[message.from_user.id] = {}
+        return
     
     await message.answer("🔄 در حال ترجمه...")
-    result = await translate_text(text, target)
+    result = await translate_file_content(text, file_type, target)
     
-    if result:
-        await message.answer(f"🌍 **ترجمه:**\n\n{result}")
+    if result and not result.startswith("❌"):
+        await message.answer(result)
     else:
-        await message.answer("❌ خطا در ترجمه!")
+        await message.answer(result or "❌ خطا در ترجمه!")
     user_states[message.from_user.id] = {}
 
 # ===== کلینر فایل =====
@@ -873,7 +1027,6 @@ async def ai_cleaner_start(call: types.CallbackQuery):
 async def ai_cleaner_process(message: types.Message):
     await message.answer("🔄 در حال پاک‌سازی فایل...")
     
-    # دانلود فایل
     if message.document:
         file = await message.bot.get_file(message.document.file_id)
         file_path = f"temp_{message.from_user.id}_{message.document.file_name}"
@@ -888,7 +1041,6 @@ async def ai_cleaner_process(message: types.Message):
         await message.answer("❌ نوع فایل پشتیبانی نمیشه!")
         return
     
-    # پاک‌سازی
     cleaned_path = None
     if file_type == "pdf":
         cleaned_path = await clean_pdf(file_path)
@@ -922,6 +1074,7 @@ async def ai_typist_start(call: types.CallbackQuery):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📝 تایپ متن", callback_data="typist_text")],
         [InlineKeyboardButton(text="🖼 استخراج از عکس", callback_data="typist_image")],
+        [InlineKeyboardButton(text="📄 تایپ فایل", callback_data="typist_file")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_panel")]
     ])
     
@@ -941,19 +1094,11 @@ async def typist_text_start(call: types.CallbackQuery):
 async def typist_text_process(message: types.Message):
     text = message.text
     await message.answer("🔄 در حال تایپ متن با فونت فارسی...")
-    
-    output_path = f"typist_{message.from_user.id}.png"
-    result = await type_persian_text(text, output_path, "Vazir", 20)
-    
-    if result:
-        with open(result, "rb") as f:
-            await message.answer_photo(
-                f,
-                caption=f"✍️ **متن تایپ شده با فونت وزیر**\n\n{text[:100]}..."
-            )
-        os.remove(result)
+    result = await ai_type_text(text, "Vazir", 20)
+    if result and not result.startswith("❌"):
+        await message.answer(result)
     else:
-        await message.answer("❌ خطا در تایپ متن!")
+        await message.answer(result or "❌ خطا در تایپ متن!")
     user_states[message.from_user.id] = {}
 
 @router.callback_query(lambda c: c.data == "typist_image")
@@ -964,13 +1109,43 @@ async def typist_image_start(call: types.CallbackQuery):
 @router.message(lambda m: m.from_user.id == ADMIN_ID and m.photo and user_states.get(m.from_user.id, {}).get("state") == "waiting_typist_image")
 async def typist_image_process(message: types.Message):
     await message.answer("🔄 در حال استخراج متن از عکس...")
-    
-    # اینجا کد OCR با Tesseract
     await message.answer(
         "✍️ **متن استخراج شده از عکس:**\n\n"
         "«این متن نمونه از عکس است که با فونت وزیر تایپ شده است.»\n\n"
         "✅ متن با فونت فارسی تایپ شد!"
     )
+    user_states[message.from_user.id] = {}
+
+@router.callback_query(lambda c: c.data == "typist_file")
+async def typist_file_start(call: types.CallbackQuery):
+    user_states[call.from_user.id] = {"state": "waiting_typist_file"}
+    await call.message.edit_text("📄 **فایل (PDF، عکس) رو بفرست تا متن داخلش رو استخراج کنم و با فونت فارسی تایپ کنم:**")
+
+@router.message(lambda m: m.from_user.id == ADMIN_ID and (m.document or m.photo) and user_states.get(m.from_user.id, {}).get("state") == "waiting_typist_file")
+async def typist_file_process(message: types.Message):
+    await message.answer("🔄 در حال استخراج متن از فایل...")
+    text = ""
+    if message.document:
+        file = await message.bot.get_file(message.document.file_id)
+        file_path = f"temp_{message.from_user.id}_{message.document.file_name}"
+        await message.bot.download_file(file.file_path, file_path)
+        text = await extract_text_from_file(file_path)
+        os.remove(file_path)
+    elif message.photo:
+        await message.answer("⚠️ تشخیص متن از عکس در حال توسعه است...")
+        user_states[message.from_user.id] = {}
+        return
+    
+    if not text:
+        await message.answer("❌ متنی برای تایپ پیدا نشد!")
+        user_states[message.from_user.id] = {}
+        return
+    
+    result = await ai_type_text(text, "Vazir", 20)
+    if result and not result.startswith("❌"):
+        await message.answer(result)
+    else:
+        await message.answer(result or "❌ خطا در تایپ متن!")
     user_states[message.from_user.id] = {}
 
 # ===== خلاصه‌سازی =====
@@ -985,7 +1160,6 @@ async def ai_summarize_start(call: types.CallbackQuery):
 @router.message(lambda m: m.from_user.id == ADMIN_ID and (m.text or m.document) and user_states.get(m.from_user.id, {}).get("state") == "waiting_summarize")
 async def ai_summarize_process(message: types.Message):
     await message.answer("🔄 در حال خلاصه‌سازی...")
-    
     text = ""
     if message.text:
         text = message.text
@@ -1002,10 +1176,10 @@ async def ai_summarize_process(message: types.Message):
         return
     
     result = await summarize_text(text)
-    if result:
+    if result and not result.startswith("❌"):
         await message.answer(f"📝 **خلاصه:**\n\n{result}")
     else:
-        await message.answer("❌ خطا در خلاصه‌سازی!")
+        await message.answer(result or "❌ خطا در خلاصه‌سازی!")
     user_states[message.from_user.id] = {}
 
 # ===== تحلیل کتاب =====
@@ -1020,7 +1194,6 @@ async def ai_analyze_start(call: types.CallbackQuery):
 @router.message(lambda m: m.from_user.id == ADMIN_ID and (m.text or m.document) and user_states.get(m.from_user.id, {}).get("state") == "waiting_analyze")
 async def ai_analyze_process(message: types.Message):
     await message.answer("🔄 در حال تحلیل...")
-    
     text = ""
     if message.text:
         text = message.text
@@ -1037,17 +1210,18 @@ async def ai_analyze_process(message: types.Message):
         return
     
     result = await analyze_book(text)
-    if result:
+    if result and not result.startswith("❌"):
         await message.answer(f"📊 **تحلیل کتاب:**\n\n{result}")
     else:
-        await message.answer("❌ خطا در تحلیل!")
+        await message.answer(result or "❌ خطا در تحلیل!")
     user_states[message.from_user.id] = {}
 
 # ========================================
 # ========================================
-# 🔐 رمز فایل
+# ===== 🔐 رمز فایل =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "🔐 رمز فایل" and m.from_user.id == ADMIN_ID)
 async def manage_password_files(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1128,9 +1302,10 @@ async def delete_password_file_confirm(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 📝 نظرات و پیشنهادات
+# ===== 📝 نظرات و پیشنهادات =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "📝 نظرات و پیشنهادات" and m.from_user.id == ADMIN_ID)
 async def view_feedback_panel(message: types.Message):
     feedbacks = get_all_feedback()
@@ -1146,9 +1321,10 @@ async def view_feedback_panel(message: types.Message):
 
 # ========================================
 # ========================================
-# 📋 بروزرسانی‌ها
+# ===== 📋 بروزرسانی‌ها =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "📋 بروزرسانی‌ها" and m.from_user.id == ADMIN_ID)
 async def updates_panel(message: types.Message):
     updates = get_all_updates()
@@ -1164,9 +1340,10 @@ async def updates_panel(message: types.Message):
 
 # ========================================
 # ========================================
-# 📢 تبلیغات
+# ===== 📢 تبلیغات =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "📢 تبلیغات" and m.from_user.id == ADMIN_ID)
 async def ads_panel(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1247,10 +1424,11 @@ async def delete_ad_confirm(message: types.Message):
 
 # ========================================
 # ========================================
-# 📱 فیلترشکن
+# ===== 📱 مدیریت فیلترشکن =====
 # ========================================
 # ========================================
-@router.message(lambda m: m.text == "📱 فیلترشکن" and m.from_user.id == ADMIN_ID)
+
+@router.message(lambda m: m.text == "📱 مدیریت فیلترشکن" and m.from_user.id == ADMIN_ID)
 async def vpn_panel(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ افزودن فیلترشکن", callback_data="add_vpn")],
@@ -1330,9 +1508,10 @@ async def delete_vpn_confirm(message: types.Message):
 
 # ========================================
 # ========================================
-# 💾 بکاپ و بازیابی
+# ===== 💾 بکاپ و بازیابی =====
 # ========================================
 # ========================================
+
 @router.message(lambda m: m.text == "💾 بکاپ و بازیابی" and m.from_user.id == ADMIN_ID)
 async def backup_panel(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -1351,9 +1530,10 @@ async def backup_db_callback(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# 🔙 برگشت به پنل
+# ===== 🔙 برگشت به پنل =====
 # ========================================
 # ========================================
+
 @router.callback_query(lambda c: c.data == "back_to_panel")
 async def back_to_panel(call: types.CallbackQuery):
     await call.message.edit_text(
