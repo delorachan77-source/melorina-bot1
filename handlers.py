@@ -5,6 +5,7 @@ from config import ADMIN_ID, GEMINI_API_KEY
 from database import *
 import json
 import aiohttp
+import asyncio
 
 router = Router()
 user_states = {}
@@ -47,6 +48,151 @@ PERSONALITIES = {
         "description": "تاریک و مرموز"
     }
 }
+
+# ========================================
+# ========================================
+# ===== چت هوشمند (نسخه جدید) =====
+# ========================================
+# ========================================
+
+async def chat_with_gemini(message, personality="کیوت"):
+    """چت هوشمند"""
+
+    if not GEMINI_API_KEY:
+        await message.answer(
+            "🌸 سرویس چت فعلاً در دسترس نیست. بعداً دوباره امتحان کن 😊"
+        )
+        return
+
+    personality_data = PERSONALITIES.get(
+        personality,
+        PERSONALITIES["کیوت"]
+    )
+
+    prompt = f"""{personality_data['prompt']}
+
+به فارسی پاسخ بده.
+پاسخ‌ها طبیعی، جذاب و متناسب با سوال کاربر باشند.
+خودت را یک دوست صمیمی نشان بده.
+هرگز درباره سرویس، مدل، API، شرکت سازنده یا نحوه پردازش پاسخ صحبت نکن.
+
+سوال کاربر:
+{message.text}
+"""
+
+    await message.answer("🌸 دارم فکر میکنم...")
+
+    try:
+        model = "gemini-2.5-flash"
+
+        url = (
+            f"https://generativelanguage.googleapis.com/"
+            f"v1beta/models/{model}:generateContent"
+            f"?key={GEMINI_API_KEY}"
+        )
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
+                }
+            ]
+        }
+
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        timeout = aiohttp.ClientTimeout(total=60)
+
+        async with aiohttp.ClientSession(
+            timeout=timeout
+        ) as session:
+
+            async with session.post(
+                url,
+                json=payload,
+                headers=headers
+            ) as response:
+
+                if response.status == 200:
+
+                    data = await response.json()
+
+                    result = (
+                        data
+                        .get("candidates", [{}])[0]
+                        .get("content", {})
+                        .get("parts", [{}])[0]
+                        .get("text", "")
+                    )
+
+                    if result:
+                        await message.answer(result)
+                        return
+
+                    await message.answer(
+                        "🌸 این بار نتونستم جواب مناسبی پیدا کنم، دوباره بپرس 😊"
+                    )
+                    return
+
+                # خطاها فقط در کنسول ادمین/سرور نمایش داده می‌شوند
+                error_text = await response.text()
+
+                print(
+                    f"❌ Chat API Error: "
+                    f"{response.status} - "
+                    f"{error_text[:1000]}"
+                )
+
+                # کاربر هیچ اسمی از Gemini نمی‌بیند
+                if response.status == 429:
+                    await message.answer(
+                        "⏳ درخواست‌ها کمی زیاد شده؛ چند لحظه دیگه دوباره امتحان کن 😊"
+                    )
+
+                elif response.status in (401, 403):
+                    await message.answer(
+                        "🌸 سرویس چت فعلاً در دسترس نیست. بعداً دوباره امتحان کن."
+                    )
+
+                elif response.status == 404:
+                    await message.answer(
+                        "🌸 سرویس چت فعلاً در دسترس نیست. بعداً دوباره امتحان کن."
+                    )
+
+                else:
+                    await message.answer(
+                        "🌸 یه مشکلی پیش اومد! دوباره امتحان کن 😊"
+                    )
+
+    except asyncio.TimeoutError:
+
+        print("❌ Chat API Timeout")
+
+        await message.answer(
+            "⏳ پاسخ کمی طول کشید؛ دوباره امتحان کن 😊"
+        )
+
+    except aiohttp.ClientError as e:
+
+        print(f"❌ Chat API Connection Error: {e}")
+
+        await message.answer(
+            "🌐 ارتباط با سرویس چت برقرار نشد. دوباره امتحان کن 😊"
+        )
+
+    except Exception as e:
+
+        print(f"❌ Chat API Error: {e}")
+
+        await message.answer(
+            "🌸 یه مشکلی پیش اومد! دوباره امتحان کن 😊"
+        )
 
 # ========================================
 # ========================================
@@ -113,48 +259,6 @@ async def send_banner(message):
         await message.answer_document(banner["file_id"], caption=banner["text"])
     else:
         await message.answer(banner["text"])
-
-# ========================================
-# ========================================
-# ===== تابع چت با جیمینای =====
-# ========================================
-# ========================================
-
-async def chat_with_gemini(message, personality="کیوت"):
-    if not GEMINI_API_KEY:
-        await message.answer("❌ جیمینای در دسترس نیست!")
-        return
-    
-    personality_data = PERSONALITIES.get(personality, PERSONALITIES["کیوت"])
-    
-    prompt = f"""{personality_data['prompt']}
-
-به فارسی پاسخ بده. پاسخ‌هات کوتاه و جذاب باشه.
-هیچوقت نگو که من جیمینای یا هوش مصنوعی هستم.
-خودت رو یه دوست صمیمی معرفی کن.
-
-سوال: {message.text}
-"""
-    
-    await message.answer("🤔 دارم فکر میکنم...")
-    
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=60) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    result = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                    if result:
-                        await message.answer(result)
-                    else:
-                        await message.answer("🌸 یه جوابی به ذهنم نرسید! دوباره بپرس 😊")
-                else:
-                    await message.answer("🌸 نتونستم جواب بدم! دوباره تلاش کن 😊")
-    except:
-        await message.answer("🌸 یه مشکلی پیش اومد! بعداً دوباره امتحان کن 😊")
 
 # ========================================
 # ========================================
@@ -352,7 +456,7 @@ async def back_to_list(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# ===== چت با جیمینای =====
+# ===== چت (منوی کاربر) =====
 # ========================================
 # ========================================
 
