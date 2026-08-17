@@ -51,12 +51,12 @@ PERSONALITIES = {
 
 # ========================================
 # ========================================
-# ===== چت هوشمند (نسخه جدید) =====
+# ===== چت هوشمند با Gemini =====
 # ========================================
 # ========================================
 
 async def chat_with_gemini(message, personality="کیوت"):
-    """چت هوشمند"""
+    """چت هوشمند با Gemini"""
 
     if not GEMINI_API_KEY:
         await message.answer(
@@ -72,28 +72,28 @@ async def chat_with_gemini(message, personality="کیوت"):
     prompt = f"""{personality_data['prompt']}
 
 به فارسی پاسخ بده.
-پاسخ‌ها طبیعی، جذاب و متناسب با سوال کاربر باشند.
-خودت را یک دوست صمیمی نشان بده.
-هرگز درباره سرویس، مدل، API، شرکت سازنده یا نحوه پردازش پاسخ صحبت نکن.
+طبیعی، دوستانه و جذاب صحبت کن.
+پاسخ‌ها بیش از حد طولانی نباشند.
+اگر کاربر سوالی پرسید، مستقیم جواب بده.
 
-سوال کاربر:
+پیام کاربر:
 {message.text}
 """
 
-    await message.answer("🌸 دارم فکر میکنم...")
+    thinking_msg = await message.answer("🌸 دارم فکر میکنم...")
 
     try:
         model = "gemini-2.5-flash"
 
         url = (
             f"https://generativelanguage.googleapis.com/"
-            f"v1beta/models/{model}:generateContent"
-            f"?key={GEMINI_API_KEY}"
+            f"v1/models/{model}:generateContent"
         )
 
         payload = {
             "contents": [
                 {
+                    "role": "user",
                     "parts": [
                         {
                             "text": prompt
@@ -104,15 +104,13 @@ async def chat_with_gemini(message, personality="کیوت"):
         }
 
         headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY
         }
 
         timeout = aiohttp.ClientTimeout(total=60)
 
-        async with aiohttp.ClientSession(
-            timeout=timeout
-        ) as session:
-
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(
                 url,
                 json=payload,
@@ -123,75 +121,93 @@ async def chat_with_gemini(message, personality="کیوت"):
 
                     data = await response.json()
 
-                    result = (
-                        data
-                        .get("candidates", [{}])[0]
-                        .get("content", {})
-                        .get("parts", [{}])[0]
-                        .get("text", "")
-                    )
+                    candidates = data.get("candidates", [])
 
-                    if result:
-                        await message.answer(result)
-                        return
+                    if candidates:
 
-                    await message.answer(
-                        "🌸 این بار نتونستم جواب مناسبی پیدا کنم، دوباره بپرس 😊"
+                        parts = (
+                            candidates[0]
+                            .get("content", {})
+                            .get("parts", [])
+                        )
+
+                        if parts:
+
+                            result = parts[0].get("text", "")
+
+                            if result:
+                                try:
+                                    await thinking_msg.delete()
+                                except:
+                                    pass
+
+                                await message.answer(result)
+                                return
+
+                    print("❌ API پاسخ خالی داد:")
+                    print(data)
+
+                    await thinking_msg.edit_text(
+                        "🌸 این بار جواب مناسبی پیدا نکردم، دوباره بپرس 😊"
                     )
                     return
 
-                # خطاها فقط در کنسول ادمین/سرور نمایش داده می‌شوند
+                # خطای واقعی فقط در کنسول نمایش داده می‌شود
                 error_text = await response.text()
 
-                print(
-                    f"❌ Chat API Error: "
-                    f"{response.status} - "
-                    f"{error_text[:1000]}"
-                )
+                print("=" * 60)
+                print("❌ CHAT API ERROR")
+                print("STATUS:", response.status)
+                print("RESPONSE:", error_text)
+                print("=" * 60)
 
-                # کاربر هیچ اسمی از Gemini نمی‌بیند
+                # کاربر هیچ اطلاعاتی درباره API نمی‌بیند
                 if response.status == 429:
-                    await message.answer(
-                        "⏳ درخواست‌ها کمی زیاد شده؛ چند لحظه دیگه دوباره امتحان کن 😊"
+
+                    await thinking_msg.edit_text(
+                        "⏳ درخواست‌ها کمی زیاد شده؛ چند لحظه صبر کن 😊"
                     )
 
                 elif response.status in (401, 403):
-                    await message.answer(
-                        "🌸 سرویس چت فعلاً در دسترس نیست. بعداً دوباره امتحان کن."
+
+                    await thinking_msg.edit_text(
+                        "🌸 سرویس چت فعلاً در دسترس نیست."
                     )
 
                 elif response.status == 404:
-                    await message.answer(
-                        "🌸 سرویس چت فعلاً در دسترس نیست. بعداً دوباره امتحان کن."
+
+                    await thinking_msg.edit_text(
+                        "🌸 سرویس چت فعلاً در دسترس نیست."
                     )
 
                 else:
-                    await message.answer(
-                        "🌸 یه مشکلی پیش اومد! دوباره امتحان کن 😊"
+
+                    await thinking_msg.edit_text(
+                        "🌸 یه مشکلی پیش اومد، دوباره امتحان کن 😊"
                     )
 
     except asyncio.TimeoutError:
 
-        print("❌ Chat API Timeout")
+        print("❌ CHAT API TIMEOUT")
 
-        await message.answer(
-            "⏳ پاسخ کمی طول کشید؛ دوباره امتحان کن 😊"
+        await thinking_msg.edit_text(
+            "⏳ پاسخ کمی طول کشید، دوباره امتحان کن 😊"
         )
 
     except aiohttp.ClientError as e:
 
-        print(f"❌ Chat API Connection Error: {e}")
+        print("❌ CHAT CONNECTION ERROR:", repr(e))
 
-        await message.answer(
-            "🌐 ارتباط با سرویس چت برقرار نشد. دوباره امتحان کن 😊"
+        await thinking_msg.edit_text(
+            "🌐 ارتباط برقرار نشد، دوباره امتحان کن 😊"
         )
 
     except Exception as e:
 
-        print(f"❌ Chat API Error: {e}")
+        print("❌ CHAT ERROR:", repr(e))
 
-        await message.answer(
-            "🌸 یه مشکلی پیش اومد! دوباره امتحان کن 😊"
+        await thinking_msg.edit_text(
+            "🌸 یه مشکلی پیش اومد، دوباره امتحان کن 😊"
         )
 
 # ========================================
@@ -262,7 +278,7 @@ async def send_banner(message):
 
 # ========================================
 # ========================================
-# ===== کتاب‌ها (لیست) =====
+# ===== کتاب‌ها =====
 # ========================================
 # ========================================
 
@@ -456,7 +472,7 @@ async def back_to_list(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# ===== چت (منوی کاربر) =====
+# ===== چت =====
 # ========================================
 # ========================================
 
@@ -566,7 +582,6 @@ async def start(message: types.Message):
     
     code = args[1]
     
-    # ===== لینک کتاب =====
     if code.startswith("book_"):
         try:
             book_id = int(code.replace("book_", ""))
@@ -583,7 +598,6 @@ async def start(message: types.Message):
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
     
-    # ===== لینک مانگا =====
     elif code.startswith("manga_"):
         try:
             manga_id = int(code.replace("manga_", ""))
@@ -600,7 +614,6 @@ async def start(message: types.Message):
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
     
-    # ===== لینک مانهوا =====
     elif code.startswith("manhwa_"):
         try:
             manhwa_id = int(code.replace("manhwa_", ""))
@@ -617,7 +630,6 @@ async def start(message: types.Message):
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
     
-    # ===== لینک معرفی مانهوا =====
     elif code.startswith("intro_"):
         try:
             intro_id = int(code.replace("intro_", ""))
@@ -725,7 +737,7 @@ async def send_manhwa(message, manhwa_id):
     if downloads:
         text += f"📥 **دانلودها:** {downloads} بار\n"
     if description:
-        text += f"\n📝 **توضیحات:**\n{description}\n"
+        text += f"\n📝 **توضیحات:\n{description}\n"
     text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
