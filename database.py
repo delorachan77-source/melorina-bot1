@@ -55,6 +55,19 @@ c.execute("""
     )
 """)
 
+# ===== جدول معرفی مانهوا (جدید) =====
+c.execute("""
+    CREATE TABLE IF NOT EXISTS manhwa_intro (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        genre TEXT,
+        cover_file_id TEXT,
+        link TEXT,
+        created_at TEXT
+    )
+""")
+
 c.execute("""
     CREATE TABLE IF NOT EXISTS channels (
         username TEXT PRIMARY KEY
@@ -242,7 +255,7 @@ def update_manga(manga_id, title, author, description, genre, cover_file_id, fil
     return True
 
 # ========================================
-# ===== توابع مانهوا =====
+# ===== توابع مانهوا (فایل) =====
 # ========================================
 def add_manhwa(title, author, description, genre, cover_file_id, file_id, file_name="", file_size=0):
     now = datetime.now().isoformat()
@@ -271,6 +284,39 @@ def update_manhwa(manhwa_id, title, author, description, genre, cover_file_id, f
         UPDATE manhwa SET title=?, author=?, description=?, genre=?, cover_file_id=?, file_id=?, file_name=?, file_size=?
         WHERE id=?
     """, (title, author, description, genre, cover_file_id, file_id, file_name, file_size, manhwa_id))
+    db.commit()
+    return True
+
+# ========================================
+# ===== توابع معرفی مانهوا (جدید) =====
+# ========================================
+def add_manhwa_intro(title, description, genre, cover_file_id, link):
+    now = datetime.now().isoformat()
+    c.execute("""
+        INSERT INTO manhwa_intro (title, description, genre, cover_file_id, link, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (title, description, genre, cover_file_id, link, now))
+    db.commit()
+    return c.lastrowid
+
+def get_all_manhwa_intro():
+    c.execute("SELECT id, title, description, genre, cover_file_id, link FROM manhwa_intro ORDER BY created_at DESC")
+    return c.fetchall()
+
+def get_manhwa_intro(intro_id):
+    c.execute("SELECT id, title, description, genre, cover_file_id, link FROM manhwa_intro WHERE id=?", (intro_id,))
+    return c.fetchone()
+
+def delete_manhwa_intro(intro_id):
+    c.execute("DELETE FROM manhwa_intro WHERE id=?", (intro_id,))
+    db.commit()
+    return True
+
+def update_manhwa_intro(intro_id, title, description, genre, cover_file_id, link):
+    c.execute("""
+        UPDATE manhwa_intro SET title=?, description=?, genre=?, cover_file_id=?, link=?
+        WHERE id=?
+    """, (title, description, genre, cover_file_id, link, intro_id))
     db.commit()
     return True
 
@@ -492,6 +538,7 @@ def clear_all_data():
     c.execute("DELETE FROM books")
     c.execute("DELETE FROM manga")
     c.execute("DELETE FROM manhwa")
+    c.execute("DELETE FROM manhwa_intro")
     c.execute("DELETE FROM channels")
     c.execute("DELETE FROM banner")
     c.execute("DELETE FROM users")
