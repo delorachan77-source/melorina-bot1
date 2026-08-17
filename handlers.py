@@ -51,16 +51,16 @@ PERSONALITIES = {
 
 # ========================================
 # ========================================
-# ===== چت هوشمند با Gemini =====
+# ===== چت با جیمینای (نسخه اصلاح شده) =====
 # ========================================
 # ========================================
 
 async def chat_with_gemini(message, personality="کیوت"):
-    """چت هوشمند با Gemini"""
+    """چت با مدل Gemini - کاربران فقط پاسخ ربات را می‌بینند"""
 
     if not GEMINI_API_KEY:
         await message.answer(
-            "🌸 سرویس چت فعلاً در دسترس نیست. بعداً دوباره امتحان کن 😊"
+            "🌸 سرویس چت فعلاً در دسترس نیست. بعداً دوباره امتحان کن."
         )
         return
 
@@ -69,73 +69,99 @@ async def chat_with_gemini(message, personality="کیوت"):
         PERSONALITIES["کیوت"]
     )
 
-    prompt = f"""{personality_data['prompt']}
+    prompt = f"""
+{personality_data['prompt']}
 
-به فارسی پاسخ بده.
-طبیعی، دوستانه و جذاب صحبت کن.
-پاسخ‌ها بیش از حد طولانی نباشند.
-اگر کاربر سوالی پرسید، مستقیم جواب بده.
+به فارسی و طبیعی جواب بده.
+پاسخ‌ها دوستانه، روان و نسبتاً کوتاه باشند.
+نام سرویس، مدل، API یا شرکت سازنده را در پاسخ مطرح نکن.
+اگر کاربر پرسید چه کسی هستی، خودت را «دستیار ربات» معرفی کن.
 
 پیام کاربر:
 {message.text}
 """
 
-    thinking_msg = await message.answer("🌸 دارم فکر میکنم...")
+    thinking_msg = await message.answer("🌸 یک لحظه...")
+
+    # مدل‌های فعلی پیشنهادی
+    models = [
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+    ]
 
     try:
-        model = "gemini-2.5-flash"
-
-        url = (
-            f"https://generativelanguage.googleapis.com/"
-            f"v1/models/{model}:generateContent"
-        )
-
-        payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "text": prompt
-                        }
-                    ]
-                }
-            ]
-        }
-
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY
-        }
-
         timeout = aiohttp.ClientTimeout(total=60)
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(
-                url,
-                json=payload,
-                headers=headers
-            ) as response:
 
-                if response.status == 200:
+            for model in models:
 
-                    data = await response.json()
+                try:
+                    url = (
+                        "https://generativelanguage.googleapis.com/"
+                        f"v1beta/models/{model}:generateContent"
+                    )
 
-                    candidates = data.get("candidates", [])
+                    payload = {
+                        "contents": [
+                            {
+                                "role": "user",
+                                "parts": [
+                                    {
+                                        "text": prompt
+                                    }
+                                ]
+                            }
+                        ],
+                        "generationConfig": {
+                            "temperature": 0.8,
+                            "topP": 0.95,
+                            "maxOutputTokens": 800
+                        }
+                    }
 
-                    if candidates:
+                    headers = {
+                        "Content-Type": "application/json",
+                        "x-goog-api-key": GEMINI_API_KEY
+                    }
 
-                        parts = (
-                            candidates[0]
-                            .get("content", {})
-                            .get("parts", [])
-                        )
+                    async with session.post(
+                        url,
+                        json=payload,
+                        headers=headers
+                    ) as response:
 
-                        if parts:
+                        response_text = await response.text()
 
-                            result = parts[0].get("text", "")
+                        if response.status == 200:
+
+                            try:
+                                data = json.loads(response_text)
+                            except json.JSONDecodeError:
+                                continue
+
+                            candidates = data.get("candidates", [])
+
+                            if not candidates:
+                                continue
+
+                            content = candidates[0].get(
+                                "content",
+                                {}
+                            )
+
+                            parts = content.get("parts", [])
+
+                            result = ""
+
+                            for part in parts:
+                                if part.get("text"):
+                                    result += part["text"]
+
+                            result = result.strip()
 
                             if result:
+
                                 try:
                                     await thinking_msg.delete()
                                 except:
@@ -144,70 +170,46 @@ async def chat_with_gemini(message, personality="کیوت"):
                                 await message.answer(result)
                                 return
 
-                    print("❌ API پاسخ خالی داد:")
-                    print(data)
+                        else:
+                            print(
+                                f"Gemini error [{model}] "
+                                f"{response.status}: "
+                                f"{response_text[:500]}"
+                            )
 
-                    await thinking_msg.edit_text(
-                        "🌸 این بار جواب مناسبی پیدا نکردم، دوباره بپرس 😊"
-                    )
-                    return
+                except asyncio.TimeoutError:
+                    print(f"Timeout on {model}")
+                    continue
 
-                # خطای واقعی فقط در کنسول نمایش داده می‌شود
-                error_text = await response.text()
+                except aiohttp.ClientError as e:
+                    print(f"Connection error on {model}: {e}")
+                    continue
 
-                print("=" * 60)
-                print("❌ CHAT API ERROR")
-                print("STATUS:", response.status)
-                print("RESPONSE:", error_text)
-                print("=" * 60)
+                except Exception as e:
+                    print(f"Model error [{model}]: {e}")
+                    continue
 
-                # کاربر هیچ اطلاعاتی درباره API نمی‌بیند
-                if response.status == 429:
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
 
-                    await thinking_msg.edit_text(
-                        "⏳ درخواست‌ها کمی زیاد شده؛ چند لحظه صبر کن 😊"
-                    )
-
-                elif response.status in (401, 403):
-
-                    await thinking_msg.edit_text(
-                        "🌸 سرویس چت فعلاً در دسترس نیست."
-                    )
-
-                elif response.status == 404:
-
-                    await thinking_msg.edit_text(
-                        "🌸 سرویس چت فعلاً در دسترس نیست."
-                    )
-
-                else:
-
-                    await thinking_msg.edit_text(
-                        "🌸 یه مشکلی پیش اومد، دوباره امتحان کن 😊"
-                    )
-
-    except asyncio.TimeoutError:
-
-        print("❌ CHAT API TIMEOUT")
-
-        await thinking_msg.edit_text(
-            "⏳ پاسخ کمی طول کشید، دوباره امتحان کن 😊"
-        )
-
-    except aiohttp.ClientError as e:
-
-        print("❌ CHAT CONNECTION ERROR:", repr(e))
-
-        await thinking_msg.edit_text(
-            "🌐 ارتباط برقرار نشد، دوباره امتحان کن 😊"
+        await message.answer(
+            "🌸 سرویس چت فعلاً در دسترس نیست. "
+            "چند لحظه دیگه دوباره امتحان کن."
         )
 
     except Exception as e:
 
-        print("❌ CHAT ERROR:", repr(e))
+        print(f"❌ Gemini fatal error: {e}")
 
-        await thinking_msg.edit_text(
-            "🌸 یه مشکلی پیش اومد، دوباره امتحان کن 😊"
+        try:
+            await thinking_msg.delete()
+        except:
+            pass
+
+        await message.answer(
+            "🌸 یه مشکلی پیش اومد. بعداً دوباره امتحان کن."
         )
 
 # ========================================
@@ -278,7 +280,7 @@ async def send_banner(message):
 
 # ========================================
 # ========================================
-# ===== کتاب‌ها =====
+# ===== کتاب‌ها (لیست) =====
 # ========================================
 # ========================================
 
@@ -472,7 +474,7 @@ async def back_to_list(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# ===== چت =====
+# ===== چت (منوی کاربر) =====
 # ========================================
 # ========================================
 
@@ -582,6 +584,7 @@ async def start(message: types.Message):
     
     code = args[1]
     
+    # ===== لینک کتاب =====
     if code.startswith("book_"):
         try:
             book_id = int(code.replace("book_", ""))
@@ -598,6 +601,7 @@ async def start(message: types.Message):
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
     
+    # ===== لینک مانگا =====
     elif code.startswith("manga_"):
         try:
             manga_id = int(code.replace("manga_", ""))
@@ -614,6 +618,7 @@ async def start(message: types.Message):
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
     
+    # ===== لینک مانهوا =====
     elif code.startswith("manhwa_"):
         try:
             manhwa_id = int(code.replace("manhwa_", ""))
@@ -630,6 +635,7 @@ async def start(message: types.Message):
         except ValueError:
             await message.answer("❌ لینک نامعتبر!")
     
+    # ===== لینک معرفی مانهوا =====
     elif code.startswith("intro_"):
         try:
             intro_id = int(code.replace("intro_", ""))
@@ -737,7 +743,7 @@ async def send_manhwa(message, manhwa_id):
     if downloads:
         text += f"📥 **دانلودها:** {downloads} بار\n"
     if description:
-        text += f"\n📝 **توضیحات:\n{description}\n"
+        text += f"\n📝 **توضیحات:**\n{description}\n"
     text += f"\n🔗 برای دریافت فایل روی دکمه زیر کلیک کن."
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
