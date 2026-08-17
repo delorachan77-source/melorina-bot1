@@ -60,6 +60,7 @@ def user_menu_keyboard():
             [KeyboardButton(text="📚 کتاب‌ها")],
             [KeyboardButton(text="📖 مانگا")],
             [KeyboardButton(text="🎨 مانهوا")],
+            [KeyboardButton(text="📱 معرفی مانهوا")],
             [KeyboardButton(text="💬 چت")],
             [KeyboardButton(text="💬 نظر و پیشنهاد")],
             [KeyboardButton(text="⭐ امتیاز به ربات")],
@@ -98,7 +99,7 @@ def join_keyboard():
 
 # ========================================
 # ========================================
-# ===== ارسال بنر (پشتیبانی از فوروارد) =====
+# ===== ارسال بنر =====
 # ========================================
 # ========================================
 
@@ -115,12 +116,11 @@ async def send_banner(message):
 
 # ========================================
 # ========================================
-# ===== تابع چت با جیمینای (کیوت) =====
+# ===== تابع چت با جیمینای =====
 # ========================================
 # ========================================
 
 async def chat_with_gemini(message, personality="کیوت"):
-    """چت با جیمینای با شخصیت مشخص"""
     if not GEMINI_API_KEY:
         await message.answer("❌ جیمینای در دسترس نیست!")
         return
@@ -158,98 +158,6 @@ async def chat_with_gemini(message, personality="کیوت"):
 
 # ========================================
 # ========================================
-# ===== منوی کتاب‌ها با چپترها =====
-# ========================================
-# ========================================
-
-def books_list_keyboard(books, prefix="book"):
-    """ساخت دکمه‌های چپترها"""
-    buttons = []
-    for book in books:
-        book_id = book[0]
-        title = book[1]
-        buttons.append([InlineKeyboardButton(
-            text=f"📖 {title}",
-            callback_data=f"{prefix}_{book_id}"
-        )])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-# ========================================
-# ========================================
-# ===== استارت =====
-# ========================================
-# ========================================
-
-@router.message(CommandStart())
-async def start(message: types.Message):
-    args = message.text.split()
-    
-    add_user(
-        message.from_user.id,
-        message.from_user.username or "",
-        message.from_user.full_name or ""
-    )
-    
-    if len(args) == 1:
-        await send_banner(message)
-        await message.answer(
-            f"👋 **سلام {message.from_user.first_name}!**\n\n"
-            "🌸 به ربات خوش اومدی!",
-            reply_markup=user_menu_keyboard()
-        )
-        return
-    
-    code = args[1]
-    if code.startswith("book_"):
-        try:
-            book_id = int(code.replace("book_", ""))
-            channels = get_channels()
-            if channels:
-                with open("temp.json", "w") as f:
-                    json.dump({"book_id": book_id, "type": "book"}, f)
-                await message.answer(
-                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
-                    reply_markup=join_keyboard()
-                )
-                return
-            await send_book(message, book_id)
-        except ValueError:
-            await message.answer("❌ لینک نامعتبر!")
-    elif code.startswith("manga_"):
-        try:
-            manga_id = int(code.replace("manga_", ""))
-            channels = get_channels()
-            if channels:
-                with open("temp.json", "w") as f:
-                    json.dump({"manga_id": manga_id, "type": "manga"}, f)
-                await message.answer(
-                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
-                    reply_markup=join_keyboard()
-                )
-                return
-            await send_manga(message, manga_id)
-        except ValueError:
-            await message.answer("❌ لینک نامعتبر!")
-    elif code.startswith("manhwa_"):
-        try:
-            manhwa_id = int(code.replace("manhwa_", ""))
-            channels = get_channels()
-            if channels:
-                with open("temp.json", "w") as f:
-                    json.dump({"manhwa_id": manhwa_id, "type": "manhwa"}, f)
-                await message.answer(
-                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
-                    reply_markup=join_keyboard()
-                )
-                return
-            await send_manhwa(message, manhwa_id)
-        except ValueError:
-            await message.answer("❌ لینک نامعتبر!")
-    else:
-        await message.answer("❌ لینک نامعتبر!")
-
-# ========================================
-# ========================================
 # ===== کتاب‌ها (لیست) =====
 # ========================================
 # ========================================
@@ -261,10 +169,14 @@ async def list_books_user(message: types.Message):
         await message.answer("❌ هیچ کتابی موجود نیست!")
         return
     
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"📖 {book[1]}", callback_data=f"book_{book[0]}")] for book in books[:10]
+    ])
+    
     await message.answer(
         "📚 **لیست کتاب‌ها:**\n\n"
         "یک کتاب رو انتخاب کن:",
-        reply_markup=books_list_keyboard(books, "book")
+        reply_markup=keyboard
     )
 
 @router.message(lambda m: m.text == "📖 مانگا")
@@ -274,10 +186,14 @@ async def list_manga_user(message: types.Message):
         await message.answer("❌ هیچ مانگایی موجود نیست!")
         return
     
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"📖 {manga[1]}", callback_data=f"manga_{manga[0]}")] for manga in manga_list[:10]
+    ])
+    
     await message.answer(
         "📖 **لیست مانگاها:**\n\n"
         "یک مانگا رو انتخاب کن:",
-        reply_markup=books_list_keyboard(manga_list, "manga")
+        reply_markup=keyboard
     )
 
 @router.message(lambda m: m.text == "🎨 مانهوا")
@@ -287,15 +203,75 @@ async def list_manhwa_user(message: types.Message):
         await message.answer("❌ هیچ مانهوایی موجود نیست!")
         return
     
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🎨 {manhwa[1]}", callback_data=f"manhwa_{manhwa[0]}")] for manhwa in manhwa_list[:10]
+    ])
+    
     await message.answer(
         "🎨 **لیست مانهواها:**\n\n"
         "یک مانهوا رو انتخاب کن:",
-        reply_markup=books_list_keyboard(manhwa_list, "manhwa")
+        reply_markup=keyboard
     )
 
 # ========================================
 # ========================================
-# ===== نمایش چپترها =====
+# ===== معرفی مانهوا =====
+# ========================================
+# ========================================
+
+@router.message(lambda m: m.text == "📱 معرفی مانهوا")
+async def list_manhwa_intro_user(message: types.Message):
+    intro_list = get_all_manhwa_intro()
+    if not intro_list:
+        await message.answer("❌ هیچ معرفی مانهوایی موجود نیست!")
+        return
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🎨 {intro[1]}", callback_data=f"intro_{intro[0]}")] for intro in intro_list[:10]
+    ])
+    
+    await message.answer(
+        "📱 **معرفی مانهواها:**\n\n"
+        "یک مانهوا رو برای معرفی انتخاب کن:",
+        reply_markup=keyboard
+    )
+
+@router.callback_query(lambda c: c.data.startswith("intro_"))
+async def show_manhwa_intro(call: types.CallbackQuery):
+    intro_id = int(call.data.replace("intro_", ""))
+    intro = get_manhwa_intro(intro_id)
+    
+    if not intro:
+        await call.answer("❌ معرفی پیدا نشد!")
+        return
+    
+    _, title, description, genre, cover_file_id, link = intro
+    
+    text = f"🎨 **معرفی مانهوا: {title}**\n\n"
+    if genre:
+        text += f"📂 **ژانر:** {genre}\n\n"
+    if description:
+        text += f"📝 {description}\n\n"
+    if link:
+        text += f"🔗 **لینک:** {link}"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔗 مشاهده", url=link)] if link else [],
+        [InlineKeyboardButton(text="🔙 بازگشت", callback_data="back_to_intro")]
+    ])
+    
+    if cover_file_id:
+        await call.message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
+    else:
+        await call.message.edit_text(text, reply_markup=keyboard)
+
+@router.callback_query(lambda c: c.data == "back_to_intro")
+async def back_to_intro(call: types.CallbackQuery):
+    await list_manhwa_intro_user(call.message)
+
+# ========================================
+# ========================================
+# ===== نمایش و دریافت چپترها =====
 # ========================================
 # ========================================
 
@@ -308,32 +284,25 @@ async def show_chapters(call: types.CallbackQuery):
     if item_type == "book":
         item = get_book(item_id)
         title = item[1]
-        file_id = item[6]
-        caption = f"📖 **{title}**\n\n📝 چپترهای این کتاب:"
+        caption = f"📖 **{title}**\n\nبرای دریافت فایل روی دکمه زیر کلیک کن:"
     elif item_type == "manga":
         item = get_manga(item_id)
         title = item[1]
-        file_id = item[6]
-        caption = f"📖 **{title}**\n\n📝 چپترهای این مانگا:"
+        caption = f"📖 **{title}**\n\nبرای دریافت فایل روی دکمه زیر کلیک کن:"
     elif item_type == "manhwa":
         item = get_manhwa(item_id)
         title = item[1]
-        file_id = item[6]
-        caption = f"🎨 **{title}**\n\n📝 چپترهای این مانهوا:"
+        caption = f"🎨 **{title}**\n\nبرای دریافت فایل روی دکمه زیر کلیک کن:"
     else:
         await call.answer("❌ پیدا نشد!")
         return
     
-    # دکمه‌های چپترها
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📥 دریافت فایل", callback_data=f"download_{item_type}_{item_id}")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data=f"back_to_{item_type}s")]
     ])
     
-    await call.message.edit_text(
-        caption,
-        reply_markup=keyboard
-    )
+    await call.message.edit_text(caption, reply_markup=keyboard)
 
 @router.callback_query(lambda c: c.data.startswith("download_"))
 async def download_item(call: types.CallbackQuery):
@@ -357,7 +326,6 @@ async def download_item(call: types.CallbackQuery):
     
     _, title, author, description, genre, cover_file_id, file_id, file_name, downloads = item
     
-    # افزایش دانلود
     if item_type == "book":
         increment_download(item_id)
     elif item_type == "manga":
@@ -365,7 +333,6 @@ async def download_item(call: types.CallbackQuery):
     elif item_type == "manhwa":
         increment_download(item_id)
     
-    # ارسال بنر + فایل
     await send_banner(call.message)
     await call.message.answer_document(
         file_id,
@@ -385,7 +352,7 @@ async def back_to_list(call: types.CallbackQuery):
 
 # ========================================
 # ========================================
-# ===== چت با جیمینای (با شخصیت) =====
+# ===== چت با جیمینای =====
 # ========================================
 # ========================================
 
@@ -467,6 +434,114 @@ async def save_rating(call: types.CallbackQuery):
     add_robot_rating(call.from_user.id, rating)
     await call.message.edit_text(f"✅ **امتیاز شما ثبت شد!**\n\n⭐ {rating} از ۱۰")
     await call.answer("✅ امتیاز ثبت شد!")
+
+# ========================================
+# ========================================
+# ===== استارت =====
+# ========================================
+# ========================================
+
+@router.message(CommandStart())
+async def start(message: types.Message):
+    args = message.text.split()
+    
+    add_user(
+        message.from_user.id,
+        message.from_user.username or "",
+        message.from_user.full_name or ""
+    )
+    
+    if len(args) == 1:
+        await send_banner(message)
+        await message.answer(
+            f"👋 **سلام {message.from_user.first_name}!**\n\n"
+            "🌸 به ربات خوش اومدی!",
+            reply_markup=user_menu_keyboard()
+        )
+        return
+    
+    code = args[1]
+    
+    # ===== لینک کتاب =====
+    if code.startswith("book_"):
+        try:
+            book_id = int(code.replace("book_", ""))
+            channels = get_channels()
+            if channels:
+                with open("temp.json", "w") as f:
+                    json.dump({"book_id": book_id, "type": "book"}, f)
+                await message.answer(
+                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
+                    reply_markup=join_keyboard()
+                )
+                return
+            await send_book(message, book_id)
+        except ValueError:
+            await message.answer("❌ لینک نامعتبر!")
+    
+    # ===== لینک مانگا =====
+    elif code.startswith("manga_"):
+        try:
+            manga_id = int(code.replace("manga_", ""))
+            channels = get_channels()
+            if channels:
+                with open("temp.json", "w") as f:
+                    json.dump({"manga_id": manga_id, "type": "manga"}, f)
+                await message.answer(
+                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
+                    reply_markup=join_keyboard()
+                )
+                return
+            await send_manga(message, manga_id)
+        except ValueError:
+            await message.answer("❌ لینک نامعتبر!")
+    
+    # ===== لینک مانهوا =====
+    elif code.startswith("manhwa_"):
+        try:
+            manhwa_id = int(code.replace("manhwa_", ""))
+            channels = get_channels()
+            if channels:
+                with open("temp.json", "w") as f:
+                    json.dump({"manhwa_id": manhwa_id, "type": "manhwa"}, f)
+                await message.answer(
+                    "🔒 **لطفاً در کانال‌های زیر عضو شوید:**",
+                    reply_markup=join_keyboard()
+                )
+                return
+            await send_manhwa(message, manhwa_id)
+        except ValueError:
+            await message.answer("❌ لینک نامعتبر!")
+    
+    # ===== لینک معرفی مانهوا =====
+    elif code.startswith("intro_"):
+        try:
+            intro_id = int(code.replace("intro_", ""))
+            intro = get_manhwa_intro(intro_id)
+            if intro:
+                _, title, description, genre, cover_file_id, link = intro
+                text = f"🎨 **معرفی مانهوا: {title}**\n\n"
+                if genre:
+                    text += f"📂 **ژانر:** {genre}\n\n"
+                if description:
+                    text += f"📝 {description}\n\n"
+                if link:
+                    text += f"🔗 **لینک:** {link}"
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔗 مشاهده", url=link)] if link else [],
+                ])
+                
+                if cover_file_id:
+                    await message.answer_photo(cover_file_id, caption=text, reply_markup=keyboard)
+                else:
+                    await message.answer(text, reply_markup=keyboard)
+            else:
+                await message.answer("❌ معرفی پیدا نشد!")
+        except ValueError:
+            await message.answer("❌ لینک نامعتبر!")
+    else:
+        await message.answer("❌ لینک نامعتبر!")
 
 # ========================================
 # ========================================
